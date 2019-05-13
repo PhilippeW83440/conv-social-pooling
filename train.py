@@ -8,7 +8,7 @@ import math
 
 # Modifs Philippe
 import pdb
-import utils_nn
+import utils_nn as utils
 import logging
 import os
 
@@ -31,9 +31,11 @@ args['train_flag'] = True
 
 # Modifs Philippe
 args['model_dir'] = 'trained_models'
+args['restore_file'] = None
+#args['restore_file'] = 'last' # or 'best'
 
 
-utils_nn.set_logger(os.path.join(args['model_dir'], 'train.log'))
+utils.set_logger(os.path.join(args['model_dir'], 'train.log'))
 
 
 # Initialize network
@@ -58,6 +60,13 @@ trDataloader = DataLoader(trSet,batch_size=batch_size,shuffle=True,num_workers=8
 valDataloader = DataLoader(valSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=valSet.collate_fn)
 
 
+# reload weights from restore_file if specified
+if args['restore_file'] is not None:
+	restore_path = os.path.join(args['model_dir'], args['restore_file'] + '.pth.tar')
+	logging.info("Restoring parameters from {}".format(restore_path))
+	utils.load_checkpoint(restore_path, net, optimizer)
+
+
 ## Variables holding train and validation loss values:
 train_loss = []
 val_loss = []
@@ -72,7 +81,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		logging.info('Training with NLL loss')
 
 
-	## Train:_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________
+	## Train:_____________________________________________________________________
 	net.train_flag = True
 
 	# Variables to track training performance:
@@ -135,11 +144,11 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			avg_lat_acc = 0
 			avg_lon_acc = 0
 			avg_tr_time = 0
-	# _________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________
+	# ______________________________________________________________________________
 
 
 
-	## Validate:______________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________
+	## Validate:____________________________________________________________________
 	net.train_flag = False
 
 	logging.info("Epoch {} complete. Calculating validation loss...".format(epoch_num+1))
@@ -195,7 +204,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 	# Save weights
 	nn_val_loss = avg_val_loss/val_batch_count
 	is_best = nn_val_loss < best_val_loss
-	utils_nn.save_checkpoint({'epoch': epoch_num + 1,
+	utils.save_checkpoint({'epoch': epoch_num + 1,
 							'state_dict': net.state_dict(),
 							'optim_dict' : optimizer.state_dict(), 
 							'val_loss': avg_val_loss/val_batch_count,
@@ -210,7 +219,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		best_val_loss = nn_val_loss
 
 
-	#__________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________
+	#_____________________________________________________________________________
 
 torch.save(net.state_dict(), 'trained_models/cslstm_m.tar')
 
