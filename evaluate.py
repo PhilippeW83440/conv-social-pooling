@@ -10,10 +10,6 @@ import os
 import utils_nn as utils
 import logging
 
-# Set the random seed for reproducible experiments
-# Should be useless for evaluate.py (to be checked later)
-torch.manual_seed(230)
-if params.cuda: torch.cuda.manual_seed(230)
 
 
 ## Network Arguments
@@ -65,6 +61,16 @@ utils.load_checkpoint(net_path, net)
 
 if params.use_cuda:
 	net = net.cuda()
+
+# Set the random seed for reproducible experiments
+# Should be useless for evaluate.py (to be checked later)
+random.seed(30)
+torch.manual_seed(230)
+if params.use_cuda: torch.cuda.manual_seed(230)
+
+# This corrects for the differences in dropout, batch normalization during training and testing.
+# No dropout, batch norm so far; but it is a good default practice anyways
+net.evaluate()
 
 logging.info("Loading the datasets...")
 tsSet = ngsimDataset('data/TestSet.mat')

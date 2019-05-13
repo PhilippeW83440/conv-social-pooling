@@ -11,11 +11,9 @@ import pdb
 import utils_nn as utils
 import logging
 import os
+import random
 
 
-# Set the random seed for reproducible experiments
-torch.manual_seed(230)
-if params.cuda: torch.cuda.manual_seed(230)
 
 ## Network Arguments
 ## cf params.json
@@ -59,6 +57,14 @@ net = highwayNet(params)
 if params.use_cuda:
 	net = net.cuda()
 
+# Set the random seed for reproducible experiments
+random.seed(30)
+torch.manual_seed(230)
+if params.use_cuda: torch.cuda.manual_seed(230)
+
+# This corrects for the differences in dropout, batch normalization during training and testing.
+# No dropout, batch norm so far; but it is a good default practice anyways
+net.train()
 
 ## Initialize optimizer
 pretrainEpochs = 5
