@@ -13,34 +13,45 @@ import logging
 import os
 
 ## Network Arguments
-args = {}
-args['use_cuda'] = True
-args['encoder_size'] = 64
-args['decoder_size'] = 128
-args['in_length'] = 16
-args['out_length'] = 25
-args['grid_size'] = (13,3)
-args['soc_conv_depth'] = 64
-args['conv_3x1_depth'] = 16
-args['dyn_embedding_size'] = 32
-args['input_embedding_size'] = 32
-args['num_lat_classes'] = 3
-args['num_lon_classes'] = 2
-args['use_maneuvers'] = True
-args['train_flag'] = True
+## cf params.json
+## Baseline params
 
-# Modifs Philippe
-args['model_dir'] = 'trained_models'
-args['restore_file'] = None
-#args['restore_file'] = 'last' # or 'best'
+#args['encoder_size'] = 64
+#args['decoder_size'] = 128
+#args['in_length'] = 16
+#args['out_length'] = 25
+#args['grid_size'] = (13,3)
+#args['soc_conv_depth'] = 64
+#args['conv_3x1_depth'] = 16
+#args['dyn_embedding_size'] = 32
+#args['input_embedding_size'] = 32
+#args['num_lat_classes'] = 3
+#args['num_lon_classes'] = 2
+#args['use_maneuvers'] = True
+
+args = {}
+args['model_dir'] = 'experiments/baseline' # 'trained_models'
+args['train_flag'] = True
+args['restore_file'] = None # or 'last' or 'best'
 
 
 utils.set_logger(os.path.join(args['model_dir'], 'train.log'))
 
+json_path = os.path.join(args['model_dir'], 'params.json')
+assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
+params = utils.Params(json_path)
+params.grid_size = (params.grid_size_lon, params.grid_size_lat)
+
+# use GPU if available
+params.use_cuda = torch.cuda.is_available()
+params.train_flag = args['train_flag']
+params.model_dir = args['model_dir']
+params.model_dir = args['restore_file']
+
 
 # Initialize network
-net = highwayNet(args)
-if args['use_cuda']:
+net = highwayNet(params)
+if params.use_cuda:
 	net = net.cuda()
 
 
@@ -96,7 +107,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		st_time = time.time()
 		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask = data
 
-		if args['use_cuda']:
+		if params.use_cuda:
 			hist = hist.cuda()
 			nbrs = nbrs.cuda()
 			mask = mask.cuda()
@@ -106,7 +117,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			op_mask = op_mask.cuda()
 
 		# Forward pass
-		if args['use_maneuvers']:
+		if params.use_maneuvers:
 			fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
 			# Pre-train with MSE loss to speed up training
 			if epoch_num < pretrainEpochs:
@@ -164,7 +175,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask = data
 
 
-		if args['use_cuda']:
+		if params.use_cuda:
 			hist = hist.cuda()
 			nbrs = nbrs.cuda()
 			mask = mask.cuda()
@@ -174,7 +185,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			op_mask = op_mask.cuda()
 
 		# Forward pass
-		if args['use_maneuvers']:
+		if params.use_maneuvers:
 			if epoch_num < pretrainEpochs:
 				# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
 				net.train_flag = True

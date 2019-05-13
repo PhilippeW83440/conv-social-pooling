@@ -3,38 +3,39 @@ import torch
 from torch.autograd import Variable
 import torch.nn as nn
 from utils import outputActivation
+import pdb
 
 class highwayNet(nn.Module):
 
     ## Initialization
-    def __init__(self,args):
+    def __init__(self,params):
         super(highwayNet, self).__init__()
 
         ## Unpack arguments
-        self.args = args
+        self.params = params
 
         ## Use gpu flag
-        self.use_cuda = args['use_cuda']
+        self.use_cuda = params.use_cuda
 
         # Flag for maneuver based (True) vs uni-modal decoder (False)
-        self.use_maneuvers = args['use_maneuvers']
+        self.use_maneuvers = params.use_maneuvers
 
         # Flag for train mode (True) vs test-mode (False)
-        self.train_flag = args['train_flag']
+        self.train_flag = params.train_flag
 
         ## Sizes of network layers
-        self.encoder_size = args['encoder_size']
-        self.decoder_size = args['decoder_size']
-        self.in_length = args['in_length']
-        self.out_length = args['out_length']
-        self.grid_size = args['grid_size']
-        self.soc_conv_depth = args['soc_conv_depth']
-        self.conv_3x1_depth = args['conv_3x1_depth']
-        self.dyn_embedding_size = args['dyn_embedding_size']
-        self.input_embedding_size = args['input_embedding_size']
-        self.num_lat_classes = args['num_lat_classes']
-        self.num_lon_classes = args['num_lon_classes']
-        self.soc_embedding_size = (((args['grid_size'][0]-4)+1)//2)*self.conv_3x1_depth
+        self.encoder_size = params.encoder_size
+        self.decoder_size = params.decoder_size
+        self.in_length = params.in_length
+        self.out_length = params.out_length
+        self.grid_size = params.grid_size
+        self.soc_conv_depth = params.soc_conv_depth
+        self.conv_3x1_depth = params.conv_3x1_depth
+        self.dyn_embedding_size = params.dyn_embedding_size
+        self.input_embedding_size = params.input_embedding_size
+        self.num_lat_classes = params.num_lat_classes
+        self.num_lon_classes = params.num_lon_classes
+        self.soc_embedding_size = (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth
 
         ## Define network weights
 
@@ -53,7 +54,7 @@ class highwayNet(nn.Module):
         self.soc_maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0))
 
         # FC social pooling layer (for comparison):
-        # self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((args['grid_size'][0]-4)+1)//2)*self.conv_3x1_depth)
+        # self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth)
 
         # Decoder LSTM
         if self.use_maneuvers:
