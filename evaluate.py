@@ -10,6 +10,11 @@ import os
 import utils_nn as utils
 import logging
 
+# Set the random seed for reproducible experiments
+# Should be useless for evaluate.py (to be checked later)
+torch.manual_seed(230)
+if params.cuda: torch.cuda.manual_seed(230)
+
 
 ## Network Arguments
 ## cf params.json

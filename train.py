@@ -12,6 +12,11 @@ import utils_nn as utils
 import logging
 import os
 
+
+# Set the random seed for reproducible experiments
+torch.manual_seed(230)
+if params.cuda: torch.cuda.manual_seed(230)
+
 ## Network Arguments
 ## cf params.json
 ## Baseline params
