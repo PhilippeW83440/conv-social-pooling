@@ -75,21 +75,39 @@ class highwayNet(nn.Module):
 
 	## Forward Pass
 	def forward(self,hist,nbrs,masks,lat_enc,lon_enc):
-		#pdb.set_trace()
 
 		## Forward pass hist:
+		# hist:              [3sec 16, batch 128,  xy 2]
+		# self.ip_emb(hist): [16, 128, 32] via nn.Linear(2, 32)
+		# an, (hn, cn)     : via nn.LSTM(in 32, hid 64)
+		# we retrieve hn   : [ 1, 128, 64]   NB: note that an [16, 128, 64] is not used (will be used for ATTENTION)
+		# hist_enc =  hn   : [ layers 1, batch 128, hid 64]
+		# hist_enc         : [ 128, 64] via reshaping (cf hist_enc.view(...))
+		# hist_enc         : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
 		_,(hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
 		hist_enc = self.leaky_relu(self.dyn_emb(hist_enc.view(hist_enc.shape[1],hist_enc.shape[2])))
 
 		## Forward pass nbrs
+		# nbrs:              [3sec 16, #nbrs_hist as much as we found in 128x13x3 eg 850, xy 2]
+		# self.ip_emb(nbrs): [16, 850, 32] vi nn.Linear(2, 32)
+		# an, (hn, cn)     : via nn.LSTM(in 32, hid64)
+		# we retrieve hn   : [1, 850, 64]   NB: note that an [16, 850, 64] is not used
+		# nbrs_enc         : [850, 64] via reshaping
 		# the traj hist of 3 secs of (X,Y)rel coords is tranformed into 64 features
 		_, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
 		nbrs_enc = nbrs_enc.view(nbrs_enc.shape[1], nbrs_enc.shape[2])
 
 		## Masked scatter
 		soc_enc = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
-		soc_enc = soc_enc.masked_scatter_(masks, nbrs_enc) # [128, 3, 13, 64] = masked_scatter_([12_, 3, 13, 64], [eg 850, 64])
+		soc_enc = soc_enc.masked_scatter_(masks, nbrs_enc) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
 		soc_enc = soc_enc.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
+
+		# soc_enc: [batch 128, hid 64, grid_lon 13, grid lat 3]
+		# NB: VALID with PyTorch (not SAME default like with TF)
+		# self.soc_conv(soc_enc):  [128, 64, 11, 1] via Conv2d(in 64, out 64, f 3)
+		# self.conv_3x1(...):      [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
+		# self.soc_maxpool(...):   [128, 16,  5, 1] via MaxPool2d(2, 1)
+		# soc_enc: [128, 80] via reshaping NB: self.soc_embedding_size = 80
 
 		## Apply convolutional social pooling:
 		soc_enc = self.soc_maxpool(self.leaky_relu(self.conv_3x1(self.leaky_relu(self.soc_conv(soc_enc)))))
@@ -101,18 +119,24 @@ class highwayNet(nn.Module):
 		# soc_enc = self.leaky_relu(self.soc_fc(soc_enc))
 
 		## Concatenate encodings:
+		# enc: [128, 112] via cat [128, 32] with [128, 80]
 		enc = torch.cat((soc_enc,hist_enc),1)
-
 
 		if self.use_maneuvers:
 			## Maneuver recognition:
+			# self.op_lat(enc): [128, 3] via nn.Linear(112, 3)
+			# lat_pred        : [128, 3] via softmax
 			lat_pred = self.softmax(self.op_lat(enc))
+			# self.op_lon(enc): [128, 2] via nn.Linear(112, 2)
+			# lat_pred        : [128, 2] via softmax
 			lon_pred = self.softmax(self.op_lon(enc))
 
 			if self.train_flag:
 				## Concatenate maneuver encoding of the true maneuver
+				# enc: [128, 117] via cat [128, 112],[128,3],[128,2]
+				# 117 features: 32 dync, 80 soc, 5 maneuver
 				enc = torch.cat((enc, lat_enc, lon_enc), 1)
-				fut_pred = self.decode(enc)
+				fut_pred = self.decode(enc) # enc: [batch 128, feats 117]
 				return fut_pred, lat_pred, lon_pred
 			else:
 				fut_pred = []
@@ -132,15 +156,24 @@ class highwayNet(nn.Module):
 
 
 	def decode(self,enc):
+		# enc: [batch 128, feats 117]
+		# we just repeat hn output, not using a_1 up to a_Tx (TODO via ATTENTION)
+		# enc: [5sec 25, batch 128, feats 117] after repeat
 		enc = enc.repeat(self.out_length, 1, 1)
+		# And now we retrieve the T_y=25 outputs and discard (hn, cn)
+		# h_dec: [25, 128, 128] via nn.LSTM(feats 117, hid 128)
 		h_dec, _ = self.dec_lstm(enc)
+		# h_dec: [batch 128, Ty 25, hid 128] via permute(1, 0, 2)
 		h_dec = h_dec.permute(1, 0, 2)
+		# fut_pred: [batch 128, Ty 25, bivariate gaussian params 5] via self.op=nn.Linear(128, 5)
 		fut_pred = self.op(h_dec)
+		# fut_pred: [Ty 25, batch 128, 5] via permute
 		fut_pred = fut_pred.permute(1, 0, 2)
 		fut_pred = outputActivation(fut_pred)
+		# fut_pred: [Ty 25, batch 128, bivariate gaussian params 5] via outputActivation which enforces pred constraints
 		return fut_pred
 
-
-
-
-
+# TODO, ideas for improvement:
+# 1) Use Attention mechanism
+# 2) Use a real Seq2Seq decoder
+# 3) Transformer
