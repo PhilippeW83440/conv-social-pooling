@@ -13,7 +13,7 @@ This code is used as a baseline and starting point for further code evolutions a
 
 # Dataset Preprocessing
 
-## NGSIM dataset
+### NGSIM dataset
   
 From NGSIM website:  
 * Register at https://data.transportation.gov/Automobiles/Next-Generation-Simulation-NGSIM-Vehicle-Trajector/8ect-6jqj  
@@ -27,25 +27,25 @@ From googledrive:
 Dataset fields:  
 * doc/trajectory-data-dictionary.htm  
 
-## Reference .mat files
+### Reference .mat files
 Obtained with preprocess_data.m (legacy) or preprocess_data_faster.m (much faster) applied to above NGSIM dataset    
 https://drive.google.com/open?id=1xxAmnsn_sROUjvJiNWetCQ7odLNFA_Zt  
 
 # Running experiments
 
-## Training  
+### Training  
 
 ```bash
 python train.py
 ```
 Using a GPU is highly recommended due to the huge speedup.
 
-## Evaluating 
+### Evaluating 
 
 ```bash
 python evaluate.py
 ```
 
-## Experiments results
+### Experiments results
 
 In https://github.com/PhilippeW83440/conv-social-pooling/tree/master/experiments  
