@@ -1,8 +1,6 @@
 # Convolutional Social Pooling
 
-Code for model proposed in [1].
-
-[1] Nachiket Deo and Mohan M. Trivedi,"Convolutional Social Pooling for Vehicle Trajectory Prediction." CVPRW, 2018
+Code for model proposed in [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional Social Pooling for Vehicle Trajectory Prediction." CVPRW, 2018
 
 This code is used as a baseline and starting point for further code evolutions and experiments with seq2seq, attention and transformer models.
 
@@ -17,13 +15,13 @@ From NGSIM website:
   
 From googledrive:  
 * Download i-80: https://drive.google.com/open?id=19ovxiJLCnS1ar1dYvUIrfdz_UnGejK-k  
-* DOwnload us-101: https://drive.google.com/open?id=14dMKew22_5evfOoSGEBYqHP3L92e7nyJ  
+* Download us-101: https://drive.google.com/open?id=14dMKew22_5evfOoSGEBYqHP3L92e7nyJ  
   
 Dataset fields:  
 * doc/trajectory-data-dictionary.htm  
 
 ## Reference .mat files
-Obtained with preprocess_data.m or preprocess_data_faster.m applied to above NGSIM dataset    
+Obtained with preprocess_data.m (legacy) or preprocess_data_faster.m (much faster) applied to above NGSIM dataset    
 https://drive.google.com/open?id=1xxAmnsn_sROUjvJiNWetCQ7odLNFA_Zt  
 
 # Training  
@@ -38,3 +36,7 @@ Using a GPU is highly recommended due to the huge speedup.
 ```bash
 python evaluate.py
 ```
+
+# Experiments results
+
+In https://github.com/PhilippeW83440/conv-social-pooling/tree/master/experiments
