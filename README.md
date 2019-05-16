@@ -4,6 +4,13 @@ Code for model proposed in [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional 
 
 This code is used as a baseline and starting point for further code evolutions and experiments with seq2seq, attention and transformer models.
 
+### Dependencies
+
+* [PyTorch](https://pytorch.org/get-started/locally/)
+* [NumPy](https://github.com/numpy/numpy/blob/master/INSTALL.rst.txt)
+* [SciPy](https://github.com/scipy/scipy/blob/master/INSTALL.rst.txt)
+
+
 # Dataset Preprocessing
 
 ## NGSIM dataset
@@ -24,19 +31,21 @@ Dataset fields:
 Obtained with preprocess_data.m (legacy) or preprocess_data_faster.m (much faster) applied to above NGSIM dataset    
 https://drive.google.com/open?id=1xxAmnsn_sROUjvJiNWetCQ7odLNFA_Zt  
 
-# Training  
+# Running experiments
+
+## Training  
 
 ```bash
 python train.py
 ```
 Using a GPU is highly recommended due to the huge speedup.
 
-# Evaluating 
+## Evaluating 
 
 ```bash
 python evaluate.py
 ```
 
-# Experiments results
+## Experiments results
 
-In https://github.com/PhilippeW83440/conv-social-pooling/tree/master/experiments
+In https://github.com/PhilippeW83440/conv-social-pooling/tree/master/experiments  
