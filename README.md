@@ -4,7 +4,7 @@ Code for model proposed in [1].
 
 [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional Social Pooling for Vehicle Trajectory Prediction." CVPRW, 2018
 
-This code is used as a baseline and starting point for further code evolutions and experiments with seq2Seq, attention and transformer models.
+This code is used as a baseline and starting point for further code evolutions and experiments with seq2seq, attention and transformer models.
 
 # Dataset Preprocessing
 
