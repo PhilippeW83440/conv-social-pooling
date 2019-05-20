@@ -1,6 +1,7 @@
 
-## Best blog post on Transformer:
+## Good blog posts on Transformer:
 * http://jalammar.github.io/illustrated-transformer/  
+* https://mchromiak.github.io/articles/2017/Sep/12/Transformer-Attention-is-all-you-need/
 
 ## Usefull videos:  
 * https://www.youtube.com/watch?v=rBCqOTEfxvg from Lukasz Kaiser (one of the author)
