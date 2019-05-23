@@ -5,15 +5,18 @@ import torch.nn.functional as F
 import math, copy, time
 from torch.autograd import Variable
 
+from utils import outputActivation
+
 import pdb
 
 
 # Customizations
 # - DONE Embeddings: linear transform d_feats -> d_model features
-# - Generator
+# - DONE Generator
 # - DONE Batching
 
 # TODO: add social context
+# TODO: use maneuvers
 
 
 # ---------- EMBEDDINGS ----------
@@ -244,17 +247,24 @@ class EncoderDecoder(nn.Module):
 
 class Generator(nn.Module):
 	"Define standard linear + softmax generation step."
-	def __init__(self, d_model, d_feats):
+	def __init__(self, d_model, tgt_params):
 		super(Generator, self).__init__()
-		self.proj = nn.Linear(d_model, d_feats)
+		self.proj = nn.Linear(d_model, tgt_params)
 
 	def forward(self, x):
-		return F.log_softmax(self.proj(x), dim=-1)
+		# params: [batch 128, Ty 25, bivariate gaussian params 5] 
+		fut_pred = self.proj(x)
+		# fut_pred: [Ty 25, batch 128, 5] via permute
+		fut_pred = fut_pred.permute(1, 0, 2)
+		fut_pred = outputActivation(fut_pred)
+		# fut_pred: [Ty 25, batch 128, bivariate gaussian params 5] via outputActivation which enforces pred constraints
+		return fut_pred
+		#return F.log_softmax(self.proj(x), dim=-1)
 
 
 # ---------- FULL MODEL ----------
 
-def make_model(src_feats, tgt_feats, N=6, 
+def make_model(src_feats, tgt_feats, tgt_params, N=6, 
 			   d_model=512, d_ff=2048, h=8, dropout=0.1):
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
@@ -267,7 +277,7 @@ def make_model(src_feats, tgt_feats, N=6,
 							 c(ff), dropout), N),
 		nn.Sequential(Embeddings(d_model, src_feats), c(position)),
 		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
-		Generator(d_model, tgt_feats))
+		Generator(d_model, tgt_params))
 	
 	# This was important from their code. 
 	# Initialize parameters with Glorot / fan_avg.

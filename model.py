@@ -76,8 +76,9 @@ class highwayNet(nn.Module):
 
 		# TRANSFORMER
 		if self.use_transformer:
-			src_feats = d_feats = 2 # (X,Y) point so far (TODO: occupancy grid)
-			self.transformer = tsf.make_model(src_feats, d_feats, N=2)
+			src_feats = tgt_feats = 2 # (X,Y) point so far (TODO: occupancy grid)
+			tgt_params = 5 # 5 params for bivariate Gaussian distrib
+			self.transformer = tsf.make_model(src_feats, tgt_feats, tgt_params, N=2)
 			self.batch = tsf.Batch()
 			print("TRANSFORMER:", self.transformer)
 
@@ -91,6 +92,8 @@ class highwayNet(nn.Module):
 			self.batch.transfo(hist, fut)
 			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask)
 			print("OUT:", out.shape)
+			transformer_fut_pred = self.transformer.generator(out) # PWE
+			print("TRANSFORMER_FUT_PRED:", transformer_fut_pred.shape)
 
 		## Forward pass hist:
 		# hist:				 [3sec 16, batch 128,  xy 2]
