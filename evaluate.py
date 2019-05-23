@@ -49,6 +49,7 @@ params.model_dir = args['restore_file']
 
 # Evaluation metric:
 metric = 'nll'	#or rmse
+metric = 'rmse'	#or rmse
 
 
 # Initialize network

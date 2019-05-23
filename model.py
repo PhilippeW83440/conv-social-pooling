@@ -4,6 +4,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 from utils import outputActivation
 import pdb
+import transformer as tsf
 
 class highwayNet(nn.Module):
 
@@ -19,6 +20,7 @@ class highwayNet(nn.Module):
 
 		# Flag for maneuver based (True) vs uni-modal decoder (False)
 		self.use_maneuvers = params.use_maneuvers
+		self.use_transformer = params.use_transformer
 
 		# Flag for train mode (True) vs test-mode (False)
 		self.train_flag = params.train_flag
@@ -72,27 +74,41 @@ class highwayNet(nn.Module):
 		self.relu = torch.nn.ReLU()
 		self.softmax = torch.nn.Softmax(dim=1)
 
+		# TRANSFORMER
+		if self.use_transformer:
+			src_feats = d_feats = 2 # (X,Y) point so far (TODO: occupancy grid)
+			self.transformer = tsf.make_model(src_feats, d_feats, N=2)
+			self.batch = tsf.Batch()
+			print("TRANSFORMER:", self.transformer)
+
 
 	## Forward Pass
-	def forward(self,hist,nbrs,masks,lat_enc,lon_enc):
+	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, fut=None):
+
+		# TRANSFORMER
+		if self.use_transformer:
+			assert fut is not None
+			self.batch.transfo(hist, fut)
+			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask)
+			print("OUT:", out.shape)
 
 		## Forward pass hist:
-		# hist:              [3sec 16, batch 128,  xy 2]
+		# hist:				 [3sec 16, batch 128,  xy 2]
 		# self.ip_emb(hist): [16, 128, 32] via nn.Linear(2, 32)
-		# an, (hn, cn)     : via nn.LSTM(in 32, hid 64)
-		# we retrieve hn   : [ 1, 128, 64]   NB: note that an [16, 128, 64] is not used (will be used for ATTENTION)
+		# an, (hn, cn)	   : via nn.LSTM(in 32, hid 64)
+		# we retrieve hn   : [ 1, 128, 64]	 NB: note that an [16, 128, 64] is not used (will be used for ATTENTION)
 		# hist_enc =  hn   : [ layers 1, batch 128, hid 64]
-		# hist_enc         : [ 128, 64] via reshaping (cf hist_enc.view(...))
-		# hist_enc         : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
+		# hist_enc		   : [ 128, 64] via reshaping (cf hist_enc.view(...))
+		# hist_enc		   : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
 		_,(hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
 		hist_enc = self.leaky_relu(self.dyn_emb(hist_enc.view(hist_enc.shape[1],hist_enc.shape[2])))
 
 		## Forward pass nbrs
-		# nbrs:              [3sec 16, #nbrs_hist as much as we found in 128x13x3 eg 850, xy 2]
+		# nbrs:				 [3sec 16, #nbrs_hist as much as we found in 128x13x3 eg 850, xy 2]
 		# self.ip_emb(nbrs): [16, 850, 32] vi nn.Linear(2, 32)
-		# an, (hn, cn)     : via nn.LSTM(in 32, hid64)
-		# we retrieve hn   : [1, 850, 64]   NB: note that an [16, 850, 64] is not used
-		# nbrs_enc         : [850, 64] via reshaping
+		# an, (hn, cn)	   : via nn.LSTM(in 32, hid64)
+		# we retrieve hn   : [1, 850, 64]	NB: note that an [16, 850, 64] is not used
+		# nbrs_enc		   : [850, 64] via reshaping
 		# the traj hist of 3 secs of (X,Y)rel coords is tranformed into 64 features
 		_, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
 		nbrs_enc = nbrs_enc.view(nbrs_enc.shape[1], nbrs_enc.shape[2])
@@ -105,7 +121,7 @@ class highwayNet(nn.Module):
 		# soc_enc: [batch 128, hid 64, grid_lon 13, grid lat 3]
 		# NB: VALID with PyTorch (not SAME default like with TF)
 		# self.soc_conv(soc_enc):  [128, 64, 11, 1] via Conv2d(in 64, out 64, f 3)
-		# self.conv_3x1(...):      [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
+		# self.conv_3x1(...):	   [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
 		# self.soc_maxpool(...):   [128, 16,  5, 1] via MaxPool2d(2, 1)
 		# soc_enc: [128, 80] via reshaping NB: self.soc_embedding_size = 80
 
@@ -125,10 +141,10 @@ class highwayNet(nn.Module):
 		if self.use_maneuvers:
 			## Maneuver recognition:
 			# self.op_lat(enc): [128, 3] via nn.Linear(112, 3)
-			# lat_pred        : [128, 3] via softmax
+			# lat_pred		  : [128, 3] via softmax
 			lat_pred = self.softmax(self.op_lat(enc))
 			# self.op_lon(enc): [128, 2] via nn.Linear(112, 2)
-			# lat_pred        : [128, 2] via softmax
+			# lat_pred		  : [128, 2] via softmax
 			lon_pred = self.softmax(self.op_lon(enc))
 
 			if self.train_flag:

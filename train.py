@@ -13,6 +13,7 @@ import logging
 import os
 import random
 
+from torchsummary import summary
 
 
 ## Network Arguments
@@ -34,6 +35,7 @@ import random
 
 args = {}
 args['model_dir'] = 'experiments/baseline' # 'trained_models'
+args['model_dir'] = 'experiments/transformer' # 'trained_models'
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
 
@@ -54,6 +56,7 @@ params.model_dir = args['restore_file']
 
 # Initialize network
 net = highwayNet(params)
+print(net)
 if params.use_cuda:
 	net = net.cuda()
 
@@ -139,7 +142,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				avg_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 				avg_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
 		else:
-			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
+			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, fut)
 			if epoch_num < pretrainEpochs:
 				l = maskedMSE(fut_pred, fut, op_mask)
 			else:

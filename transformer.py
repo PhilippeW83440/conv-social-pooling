@@ -3,23 +3,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math, copy, time
+from torch.autograd import Variable
+
+import pdb
 
 
-# TODO: to be customized
-# - Embeddings
+# Customizations
+# - DONE Embeddings: linear transform d_feats -> d_model features
 # - Generator
+# - DONE Batching
+
+# TODO: add social context
 
 
 # ---------- EMBEDDINGS ----------
 
 class Embeddings(nn.Module):
-	def __init__(self, d_model, vocab):
+	def __init__(self, d_model, d_feats):
 		super(Embeddings, self).__init__()
-		self.lut = nn.Embedding(vocab, d_model)
+		#self.lut = nn.Embedding(vocab, d_model)
+		self.traj_emb = torch.nn.Linear(d_feats, d_model)
 		self.d_model = d_model
 
 	def forward(self, x):
-		return self.lut(x) * math.sqrt(self.d_model)
+		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
+		print("EMB:", emb.shape)
+		return emb
+		#return self.lut(x) * math.sqrt(self.d_model)
 
 
 class PositionalEncoding(nn.Module):
@@ -234,9 +244,9 @@ class EncoderDecoder(nn.Module):
 
 class Generator(nn.Module):
 	"Define standard linear + softmax generation step."
-	def __init__(self, d_model, vocab):
+	def __init__(self, d_model, d_feats):
 		super(Generator, self).__init__()
-		self.proj = nn.Linear(d_model, vocab)
+		self.proj = nn.Linear(d_model, d_feats)
 
 	def forward(self, x):
 		return F.log_softmax(self.proj(x), dim=-1)
@@ -244,7 +254,7 @@ class Generator(nn.Module):
 
 # ---------- FULL MODEL ----------
 
-def make_model(src_vocab, tgt_vocab, N=6, 
+def make_model(src_feats, tgt_feats, N=6, 
 			   d_model=512, d_ff=2048, h=8, dropout=0.1):
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
@@ -255,9 +265,9 @@ def make_model(src_vocab, tgt_vocab, N=6,
 		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
 		Decoder(DecoderLayer(d_model, c(attn), c(attn), 
 							 c(ff), dropout), N),
-		nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
-		nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
-		Generator(d_model, tgt_vocab))
+		nn.Sequential(Embeddings(d_model, src_feats), c(position)),
+		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
+		Generator(d_model, tgt_feats))
 	
 	# This was important from their code. 
 	# Initialize parameters with Glorot / fan_avg.
@@ -266,32 +276,59 @@ def make_model(src_vocab, tgt_vocab, N=6,
 			nn.init.xavier_uniform(p)
 	return model
 
-class make_batch_masks:
-    "Object for holding a batch of data with mask during training."
-    def __init__(self, src, trg, pad=0):
-        self.src = src
+
+# ---------- BATCH utility ----------
+
+class Batch:
+	"Object for holding a batch of data with mask during training."
+	def __init__(self):
+		self.src = None
+		self.trg = None
+
+	def transfo(self, source, target, pad=0):
+		pdb.set_trace()
+
+		# We want [Batch, Tx, Nx]
+		src = copy.copy(source)
+		src = src.permute(1, 0, 2)
+		self.src = src
+
+		# We want [Batch, Ty, Ny]
+		trg = copy.copy(target)
+		trg = trg.permute(1, 0, 2)
 
 		# ensure sequentiality between input and output of decoder
 		# y(n) depends on y(1)...y(n-1)
-        self.trg = trg[:, :-1]  # input  of DECODER
-        self.trg_y = trg[:, 1:] # expected output of DECODER
+		self.trg = trg[:, :-1, :]	# input  of DECODER
+		self.trg_y = trg[:, 1:, :] # expected output of DECODER
 		# otherwise the decoder just "learns" to copy the input ...
 		# with quickly a loss of 0 during training .....
 
-        m,   Tx = src.shape
-        my,  Ty = trg.shape
-        assert m == my, "src and trg batch sizes do not match"
-        
+		m,	 Tx, nx = src.shape
+		my,  Ty, ny = trg.shape
+		assert m == my, "src and trg batch sizes do not match"
+		
 		# encoder has full visibility on all inputs
-        src_mask = np.ones((1, Tx), dtype='uint8')
-        #src_mask[:,0] = 0
-        src_mask = np.repeat(src_mask[np.newaxis, :, :], m, axis=0)
-        self.src_mask = torch.from_numpy(src_mask)
-        
+		src_mask = np.ones((1, Tx), dtype='uint8')
+		#src_mask[:,0] = 0
+		src_mask = np.repeat(src_mask[np.newaxis, :, :], m, axis=0)
+		self.src_mask = torch.from_numpy(src_mask)
+		
 		# decoder at step n, has visibility on y(1)..y(n-1)
-        trg_mask = np.ones((Ty-1,Ty-1), dtype='uint8')
-        trg_mask = np.tril(trg_mask, 0)
-        trg_mask = np.repeat(trg_mask[np.newaxis, :, :], m, axis=0)
-        self.trg_mask = torch.from_numpy(trg_mask)
-        
-        self.ntokens  = torch.from_numpy(np.array([m*(Ty-1)]))
+		trg_mask = np.ones((Ty-1,Ty-1), dtype='uint8')
+		trg_mask = np.tril(trg_mask, 0)
+		trg_mask = np.repeat(trg_mask[np.newaxis, :, :], m, axis=0)
+		self.trg_mask = torch.from_numpy(trg_mask)
+
+		self.ntokens  = torch.from_numpy(np.array([m*Tx]))
+
+		print("SRC:", self.src.shape)
+		print("TRG:", self.trg.shape)
+		print("TRG_Y:", self.trg_y.shape)
+
+		if torch.cuda.is_available():
+			self.src = self.src.cuda()
+			self.src_mask = self.src_mask.cuda()
+			self.trg = self.trg.cuda()
+			self.trg_mask = self.trg_mask.cuda()
+			self.trg_y = self.trg_y.cuda()
