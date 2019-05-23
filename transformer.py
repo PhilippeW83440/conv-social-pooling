@@ -265,3 +265,33 @@ def make_model(src_vocab, tgt_vocab, N=6,
 		if p.dim() > 1:
 			nn.init.xavier_uniform(p)
 	return model
+
+class make_batch_masks:
+    "Object for holding a batch of data with mask during training."
+    def __init__(self, src, trg, pad=0):
+        self.src = src
+
+		# ensure sequentiality between input and output of decoder
+		# y(n) depends on y(1)...y(n-1)
+        self.trg = trg[:, :-1]  # input  of DECODER
+        self.trg_y = trg[:, 1:] # expected output of DECODER
+		# otherwise the decoder just "learns" to copy the input ...
+		# with quickly a loss of 0 during training .....
+
+        m,   Tx = src.shape
+        my,  Ty = trg.shape
+        assert m == my, "src and trg batch sizes do not match"
+        
+		# encoder has full visibility on all inputs
+        src_mask = np.ones((1, Tx), dtype='uint8')
+        #src_mask[:,0] = 0
+        src_mask = np.repeat(src_mask[np.newaxis, :, :], m, axis=0)
+        self.src_mask = torch.from_numpy(src_mask)
+        
+		# decoder at step n, has visibility on y(1)..y(n-1)
+        trg_mask = np.ones((Ty-1,Ty-1), dtype='uint8')
+        trg_mask = np.tril(trg_mask, 0)
+        trg_mask = np.repeat(trg_mask[np.newaxis, :, :], m, axis=0)
+        self.trg_mask = torch.from_numpy(trg_mask)
+        
+        self.ntokens  = torch.from_numpy(np.array([m*(Ty-1)]))
