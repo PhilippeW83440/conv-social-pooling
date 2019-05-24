@@ -121,7 +121,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 	for i, data in enumerate(trDataloader):
 
 		st_time = time.time()
-		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, grid = data
+		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
 
 		if params.use_cuda:
 			hist = hist.cuda()
@@ -131,11 +131,11 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			lon_enc = lon_enc.cuda()
 			fut = fut.cuda()
 			op_mask = op_mask.cuda()
-			grid = grid.cuda()
+			hist_grid = hist_grid.cuda()
 
 		# Forward pass
 		if params.use_maneuvers:
-			fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, grid, fut)
+			fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
 			# Pre-train with MSE loss to speed up training
 			if epoch_num < pretrainEpochs:
 				l = maskedMSE(fut_pred, fut, op_mask)
@@ -145,7 +145,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				avg_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 				avg_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
 		else:
-			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, grid, fut)
+			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
 			if epoch_num < pretrainEpochs:
 				l = maskedMSE(fut_pred, fut, op_mask)
 			else:
@@ -189,7 +189,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 	for i, data  in enumerate(valDataloader):
 		st_time = time.time()
-		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, grid = data
+		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
 
 
 		if params.use_cuda:
@@ -200,13 +200,14 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			lon_enc = lon_enc.cuda()
 			fut = fut.cuda()
 			op_mask = op_mask.cuda()
+			hist_grid = hist_grid.cuda()
 
 		# Forward pass
 		if params.use_maneuvers:
 			if epoch_num < pretrainEpochs:
 				# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
 				net.train_flag = True
-				fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, grid)
+				fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 				l = maskedMSE(fut_pred, fut, op_mask)
 			else:
 				# During training with NLL loss, validate with NLL over multi-modal distribution
@@ -215,7 +216,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 				avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
 		else:
-			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, grid)
+			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 			if epoch_num < pretrainEpochs:
 				l = maskedMSE(fut_pred, fut, op_mask)
 			else:

@@ -20,7 +20,7 @@ class ngsimDataset(Dataset):
 		self.enc_size = enc_size # size of encoder LSTM
 		self.grid_size = grid_size # size of social context grid
 
-
+		self.Tx = self.t_h//self.d_s + 1
 
 	def __len__(self):
 		return len(self.D)
@@ -37,6 +37,17 @@ class ngsimDataset(Dataset):
 
 		# Get track history 'hist' = ndarray, and future track 'fut' = ndarray
 		hist = self.getHistory(vehId,t,vehId,dsId)
+
+		# ACHTUNG: this may be slow (check later)
+		hist_grid = np.zeros((self.Tx, self.grid_size[0], self.grid_size[1]))
+		i = idx; count = 1
+		while i >= 0 and i > idx - self.Tx:
+			past_grid = self.D[i, 8:] # First one is actually current grid
+			past_grid = np.reshape(past_grid, (3,13)).transpose()
+			hist_grid[-count, :] = past_grid
+			i -= 1
+			count += 1
+
 		fut = self.getFuture(vehId,t,dsId)
 
 		# Get track histories of all neighbours 'neighbors' = [ndarray,[],ndarray,ndarray]
@@ -49,7 +60,7 @@ class ngsimDataset(Dataset):
 		lat_enc = np.zeros([3])
 		lat_enc[int(self.D[idx, 6] - 1)] = 1
 
-		return hist,fut,neighbors,lat_enc,lon_enc,grid
+		return hist,fut,neighbors,lat_enc,lon_enc,hist_grid
 
 
 
@@ -111,11 +122,11 @@ class ngsimDataset(Dataset):
 		op_mask_batch = torch.zeros(self.t_f//self.d_s,len(samples),2)
 		lat_enc_batch = torch.zeros(len(samples),3)
 		lon_enc_batch = torch.zeros(len(samples), 2)
-		grid_batch = torch.zeros(len(samples), self.grid_size[0]*self.grid_size[1])
+		hist_grid_batch = torch.zeros(len(samples), self.Tx, self.grid_size[0], self.grid_size[1])
 
 
 		count = 0
-		for sampleId,(hist, fut, nbrs, lat_enc, lon_enc, grid) in enumerate(samples):
+		for sampleId,(hist, fut, nbrs, lat_enc, lon_enc, hist_grid) in enumerate(samples):
 
 			# Set up history, future, lateral maneuver and longitudinal maneuver batches:
 			hist_batch[0:len(hist),sampleId,0] = torch.from_numpy(hist[:, 0])
@@ -125,7 +136,8 @@ class ngsimDataset(Dataset):
 			op_mask_batch[0:len(fut),sampleId,:] = 1
 			lat_enc_batch[sampleId,:] = torch.from_numpy(lat_enc)
 			lon_enc_batch[sampleId, :] = torch.from_numpy(lon_enc)
-			grid_batch[sampleId, :] = torch.from_numpy(grid)
+
+			hist_grid_batch[sampleId, :, :, :] = torch.from_numpy(hist_grid)
 
 			# Set up neighbor, neighbor sequence length, and mask batches:
 			for id,nbr in enumerate(nbrs):
@@ -149,7 +161,7 @@ class ngsimDataset(Dataset):
 		# 850/128 => here in this batch, on average 6.6 cars in the (13,3) grid
 		assert count==nbr_batch_size, "Otherwise in model.py soc_enc.masked_scatter_(masks, nbrs_enc) WILL NOT MATCH !!!" 
 
-		return hist_batch, nbrs_batch, mask_batch, lat_enc_batch, lon_enc_batch, fut_batch, op_mask_batch, grid_batch
+		return hist_batch, nbrs_batch, mask_batch, lat_enc_batch, lon_enc_batch, fut_batch, op_mask_batch, hist_grid_batch
 
 #________________________________________________________________________________________________________________________________________
 
