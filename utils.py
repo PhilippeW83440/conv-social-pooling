@@ -44,6 +44,7 @@ class ngsimDataset(Dataset):
 		while i >= 0 and i > idx - self.Tx:
 			past_grid = self.D[i, 8:] # First one is actually current grid
 			past_grid = np.reshape(past_grid, (3,13)).transpose()
+			past_grid = (past_grid > 0).astype(int) # just an occupancy grid
 			hist_grid[-count, :] = past_grid
 			i -= 1
 			count += 1

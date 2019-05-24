@@ -22,11 +22,27 @@ import pdb
 # ---------- EMBEDDINGS ----------
 
 class Embeddings(nn.Module):
-	def __init__(self, d_model, d_feats):
+	def __init__(self, d_model, d_feats, soc_nch=0, soc_grid=(13,3)):
 		super(Embeddings, self).__init__()
 		#self.lut = nn.Embedding(vocab, d_model)
-		self.traj_emb = torch.nn.Linear(d_feats, d_model)
 		self.d_model = d_model
+
+		if soc_nch > 0:
+
+			self.soc_nch = soc_nch
+			self.soc_grid = soc_grid
+
+			assert soc_grid == (13,3) # so far this is the current assumption
+			# We start with [Batch, soc_nch, 13, 3]
+			self.conv1 = torch.nn.Conv2d(soc_nch, 64, 3) # => [64, 11, 1]
+			self.conv2 = torch.nn.Conv2d(64, 16, (3,1))  # => [16,  9, 1]
+			self.maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0)) # => [16, 5, 1]
+
+			self.traj_emb = torch.nn.Linear(d_feats, d_model//2)
+			self.soc_emb = torch.nn.Linear(80, d_model//2) # 80 = 16*5*1
+		else:
+			self.traj_emb = torch.nn.Linear(d_feats, d_model)
+			self.soc_nch = 0
 
 	def forward(self, x):
 		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
@@ -265,6 +281,7 @@ class Generator(nn.Module):
 # ---------- FULL MODEL ----------
 
 def make_model(src_feats, tgt_feats, tgt_params, N=6, 
+			   soc_nch=0, soc_grid=(13,3),
 			   d_model=512, d_ff=2048, h=8, dropout=0.1):
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
@@ -275,7 +292,7 @@ def make_model(src_feats, tgt_feats, tgt_params, N=6,
 		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
 		Decoder(DecoderLayer(d_model, c(attn), c(attn), 
 							 c(ff), dropout), N),
-		nn.Sequential(Embeddings(d_model, src_feats), c(position)),
+		nn.Sequential(Embeddings(d_model, src_feats, soc_nch, soc_grid), c(position)),
 		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
 		Generator(d_model, tgt_params))
 	

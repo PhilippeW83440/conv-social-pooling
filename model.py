@@ -88,13 +88,13 @@ class highwayNet(nn.Module):
 
 		# TRANSFORMER
 		if self.use_transformer:
-			print("HIST_GRID", hist_grid.shape)
-			#print(grid)
+			print("HIST_GRID", hist_grid.shape) # [128, 16, 13, 3]
+			pdb.set_trace()
 			assert fut is not None
 			self.batch.transfo(hist, fut)
 			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask)
 			print("OUT:", out.shape)
-			transformer_fut_pred = self.transformer.generator(out) # PWE
+			transformer_fut_pred = self.transformer.generator(out)
 			print("TRANSFORMER_FUT_PRED:", transformer_fut_pred.shape)
 
 		## Forward pass hist:
