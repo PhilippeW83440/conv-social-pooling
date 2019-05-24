@@ -84,10 +84,12 @@ class highwayNet(nn.Module):
 
 
 	## Forward Pass
-	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, fut=None):
+	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, grid, fut=None):
 
 		# TRANSFORMER
 		if self.use_transformer:
+			print("GRID", grid.shape)
+			#print(grid)
 			assert fut is not None
 			self.batch.transfo(hist, fut)
 			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask)
