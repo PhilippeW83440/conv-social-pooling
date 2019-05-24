@@ -15,7 +15,7 @@ import pdb
 # - DONE Generator
 # - DONE Batching
 
-# TODO: add social context
+# WIP: add social context
 # TODO: use maneuvers
 
 
@@ -28,7 +28,6 @@ class Embeddings(nn.Module):
 		self.d_model = d_model
 
 		if soc_nch > 0:
-
 			self.soc_nch = soc_nch
 			self.soc_grid = soc_grid
 
@@ -39,13 +38,25 @@ class Embeddings(nn.Module):
 			self.maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0)) # => [16, 5, 1]
 
 			self.traj_emb = torch.nn.Linear(d_feats, d_model//2)
-			self.soc_emb = torch.nn.Linear(80, d_model//2) # 80 = 16*5*1
+			self.soc_emb = torch.nn.Linear(5, d_model//2) # 5 from [16, 5, 1]
 		else:
-			self.traj_emb = torch.nn.Linear(d_feats, d_model)
 			self.soc_nch = 0
+			self.traj_emb = torch.nn.Linear(d_feats, d_model)
 
 	def forward(self, x):
+		# workaround to make nn.Sequential work with multiple inputs
+		# cf https://discuss.pytorch.org/t/nn-sequential-layers-forward-with-multiple-inputs-error/35591/3
+		x, soc = x[0], x[1]
+		print("SOC:", soc)
 		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
+
+		if soc is not None:
+			## Apply convolutional social pooling: => [128, 16, 5, 1]
+			soc_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(soc)))))
+			soc_enc = torch.squeeze(soc_enc) # [128, 16, 5]
+			soc_emb = self.soc_emb(soc_enc)
+			emb = torch.cat((emb,soc_emb), dim=-1)
+
 		print("EMB:", emb.shape)
 		return emb
 		#return self.lut(x) * math.sqrt(self.d_model)
@@ -247,16 +258,16 @@ class EncoderDecoder(nn.Module):
 		self.tgt_embed = tgt_embed
 		self.generator = generator
 		
-	def forward(self, src, tgt, src_mask, tgt_mask):
+	def forward(self, src, tgt, src_mask, tgt_mask, soc=None):
 		"Take in and process masked src and target sequences."
-		return self.decode(self.encode(src, src_mask), src_mask,
+		return self.decode(self.encode(src, src_mask, soc), src_mask,
 							tgt, tgt_mask)
 	
-	def encode(self, src, src_mask):
-		return self.encoder(self.src_embed(src), src_mask)
+	def encode(self, src, src_mask, soc=None):
+		return self.encoder(self.src_embed((src, soc)), src_mask)
 	
 	def decode(self, memory, src_mask, tgt, tgt_mask):
-		return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
+		return self.decoder(self.tgt_embed((tgt, None)), memory, src_mask, tgt_mask)
 
 
 # ---------- GENERATOR: for final output ----------
