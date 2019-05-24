@@ -16,7 +16,9 @@ import pdb
 # - DONE Batching
 
 # DONE: add social context
-# TODO: use maneuvers
+# WIP : use maneuvers
+#			- GeneratorLat and GeneratorLon DONE
+#			- Embeddings with lat/lon features TODO
 
 
 # ---------- EMBEDDINGS ----------
@@ -34,7 +36,7 @@ class Embeddings(nn.Module):
 			assert soc_grid == (13,3) # so far this is the current assumption
 			# We start with [Batch, soc_nch, 13, 3]
 			self.conv1 = torch.nn.Conv2d(soc_nch, 64, 3) # => [64, 11, 1]
-			self.conv2 = torch.nn.Conv2d(64, 16, (3,1))  # => [16,  9, 1]
+			self.conv2 = torch.nn.Conv2d(64, 16, (3,1))  # => [16,	9, 1]
 			self.maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0)) # => [16, 5, 1]
 			self.leaky_relu = torch.nn.LeakyReLU(0.1)
 
@@ -50,9 +52,8 @@ class Embeddings(nn.Module):
 		x, soc = x[0], x[1]
 		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
 
-		pdb.set_trace()
-
 		if self.soc_nch > 0:
+			pdb.set_trace()
 			assert soc is not None
 			## Apply convolutional social pooling: => [128, 16, 5, 1]
 			soc_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(soc)))))
@@ -253,13 +254,15 @@ class EncoderDecoder(nn.Module):
 	A standard Encoder-Decoder architecture. Base for this and many 
 	other models.
 	"""
-	def __init__(self, encoder, decoder, src_embed, tgt_embed, generator):
+	def __init__(self, encoder, decoder, src_embed, tgt_embed, generator, generator_lat, generator_lon):
 		super(EncoderDecoder, self).__init__()
 		self.encoder = encoder
 		self.decoder = decoder
 		self.src_embed = src_embed
 		self.tgt_embed = tgt_embed
 		self.generator = generator
+		self.generator_lat = generator_lat
+		self.generator_lon = generator_lon
 		
 	def forward(self, src, tgt, src_mask, tgt_mask, soc=None):
 		"Take in and process masked src and target sequences."
@@ -291,6 +294,34 @@ class Generator(nn.Module):
 		return fut_pred
 		#return F.log_softmax(self.proj(x), dim=-1)
 
+class GeneratorLat(nn.Module):
+	"Define standard linear + softmax generation step."
+	def __init__(self, d_model):
+		super(GeneratorLat, self).__init__()
+		# 3 classes: right, left, none
+		self.proj = nn.Linear(d_model, 3)
+
+	def forward(self, x):
+		pdb.set_trace()
+		lat_pred = F.softmax(self.proj(x), dim=-1) # [Batch 128, Ty, 3]
+		lat_pred = lat_pred[:, -1, :]
+		lat_pred = torch.squeeze(lat_pred)
+		return lat_pred # [Batch 128, 3]
+
+class GeneratorLon(nn.Module):
+	"Define standard linear + softmax generation step."
+	def __init__(self, d_model):
+		super(GeneratorLon, self).__init__()
+		# 2 classes: braking or not
+		self.proj = nn.Linear(d_model, 2)
+
+	def forward(self, x):
+		lon_pred = F.softmax(self.proj(x), dim=-1)
+		lon_pred = lon_pred[:, -1, :]
+		lon_pred = torch.squeeze(lon_pred)
+		return lon_pred # [Batch 128, 2]
+
+
 
 # ---------- FULL MODEL ----------
 
@@ -308,7 +339,9 @@ def make_model(src_feats, tgt_feats, tgt_params, N=6,
 							 c(ff), dropout), N),
 		nn.Sequential(Embeddings(d_model, src_feats, soc_nch, soc_grid), c(position)),
 		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
-		Generator(d_model, tgt_params))
+		Generator(d_model, tgt_params),
+		GeneratorLat(d_model),
+		GeneratorLon(d_model))
 	
 	# This was important from their code. 
 	# Initialize parameters with Glorot / fan_avg.
