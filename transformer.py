@@ -15,7 +15,7 @@ import pdb
 # - DONE Generator
 # - DONE Batching
 
-# WIP: add social context
+# DONE: add social context
 # TODO: use maneuvers
 
 
@@ -36,6 +36,7 @@ class Embeddings(nn.Module):
 			self.conv1 = torch.nn.Conv2d(soc_nch, 64, 3) # => [64, 11, 1]
 			self.conv2 = torch.nn.Conv2d(64, 16, (3,1))  # => [16,  9, 1]
 			self.maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0)) # => [16, 5, 1]
+			self.leaky_relu = torch.nn.LeakyReLU(0.1)
 
 			self.traj_emb = torch.nn.Linear(d_feats, d_model//2)
 			self.soc_emb = torch.nn.Linear(5, d_model//2) # 5 from [16, 5, 1]
@@ -47,10 +48,12 @@ class Embeddings(nn.Module):
 		# workaround to make nn.Sequential work with multiple inputs
 		# cf https://discuss.pytorch.org/t/nn-sequential-layers-forward-with-multiple-inputs-error/35591/3
 		x, soc = x[0], x[1]
-		print("SOC:", soc)
 		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
 
-		if soc is not None:
+		pdb.set_trace()
+
+		if self.soc_nch > 0:
+			assert soc is not None
 			## Apply convolutional social pooling: => [128, 16, 5, 1]
 			soc_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(soc)))))
 			soc_enc = torch.squeeze(soc_enc) # [128, 16, 5]
@@ -58,7 +61,7 @@ class Embeddings(nn.Module):
 			emb = torch.cat((emb,soc_emb), dim=-1)
 
 		print("EMB:", emb.shape)
-		return emb
+		return emb # * math.sqrt(self.d_model)
 		#return self.lut(x) * math.sqrt(self.d_model)
 
 
@@ -321,15 +324,18 @@ class Batch:
 	"Object for holding a batch of data with mask during training."
 	def __init__(self):
 		self.src = None
+		self.soc = None
 		self.trg = None
 
-	def transfo(self, source, target, pad=0):
-		pdb.set_trace()
-
+	def transfo(self, source, target, social_context=None):
 		# We want [Batch, Tx, Nx]
 		src = copy.copy(source)
 		src = src.permute(1, 0, 2)
 		self.src = src
+
+		# [Batch, Tx, 13, 3]
+		soc = copy.copy(social_context)
+		self.soc = soc
 
 		# We want [Batch, Ty, Ny]
 		trg = copy.copy(target)
@@ -361,6 +367,8 @@ class Batch:
 		self.ntokens  = torch.from_numpy(np.array([m*Tx]))
 
 		print("SRC:", self.src.shape)
+		if self.soc is not None:
+			print("SOC:", self.soc.shape)
 		print("TRG:", self.trg.shape)
 		print("TRG_Y:", self.trg_y.shape)
 
@@ -370,3 +378,5 @@ class Batch:
 			self.trg = self.trg.cuda()
 			self.trg_mask = self.trg_mask.cuda()
 			self.trg_y = self.trg_y.cuda()
+			if self.soc is not None:
+				self.soc = self.soc.cuda()
