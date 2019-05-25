@@ -1,0 +1,3 @@
+numpy
+# Upgrade to torch 1.1.0 so we can use torch.repeat_interleave()
+torch=1.1.0
