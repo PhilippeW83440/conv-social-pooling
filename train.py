@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 import time
 import math
 
-# Modifs Philippe
 import pdb
 import utils_nn as utils
 import logging
@@ -110,6 +109,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 	## Train:_____________________________________________________________________
 	net.train_flag = True
+	net.train() # This is super important for Transformer ... as it uses dropouts...
 
 	# Variables to track training performance:
 	avg_tr_loss = 0
@@ -180,6 +180,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 	## Validate:____________________________________________________________________
 	net.train_flag = False
+	net.eval() # This is super important for Transformer ... as it uses dropouts...
 
 	logging.info("Epoch {} complete. Calculating validation loss...".format(epoch_num+1))
 
@@ -231,7 +232,6 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 	val_loss.append(avg_val_loss/val_batch_count)
 	prev_val_loss = avg_val_loss/val_batch_count
 
-	# Modifs Philippe
 	# Save weights
 	nn_val_loss = avg_val_loss/val_batch_count
 	is_best = nn_val_loss < best_val_loss
