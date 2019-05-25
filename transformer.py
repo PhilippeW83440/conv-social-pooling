@@ -18,48 +18,78 @@ import pdb
 # DONE: add social context
 # WIP : use maneuvers
 #			- GeneratorLat and GeneratorLon DONE
-#			- Embeddings with lat/lon features TODO
+#			- Embeddings with traj/grid/lat/lon features DONE
 
 
 # ---------- EMBEDDINGS ----------
 
 class Embeddings(nn.Module):
-	def __init__(self, d_model, d_feats, soc_nch=0, soc_grid=(13,3)):
+	def __init__(self, d_model, src_feats, src_ngrid=0, src_grid=(13,3), src_lon=0, src_lat=0):
 		super(Embeddings, self).__init__()
 		#self.lut = nn.Embedding(vocab, d_model)
-		self.d_model = d_model
+		self.d_model = copy.copy(d_model)
 
-		if soc_nch > 0:
-			self.soc_nch = soc_nch
-			self.soc_grid = soc_grid
+		self.traj_emb = None
+		self.grid_emb = None
+		self.lat_emb = None
+		self.lon_emb = None
 
-			assert soc_grid == (13,3) # so far this is the current assumption
-			# We start with [Batch, soc_nch, 13, 3]
-			self.conv1 = torch.nn.Conv2d(soc_nch, 64, 3) # => [64, 11, 1]
+		# Baiscally out of the 512 features for d_model encoding we split as:
+		#	256 features for ego traj inputs
+		#	256 features for social context (occupancy grid) inputs
+		# Additionaly we may reserve 20 features (3*4+2*4) for maneuveurs used as inputs
+
+		# Or just 512 features for taj_emb (eg at the output)
+
+		if src_ngrid > 0: # handle 2D input features with conv net
+			assert src_grid == (13,3) # so far this is the current assumption
+			d_model_grid = d_model//2
+			d_model -= d_model_grid
+			# We start with [Batch, src_ngrid, 13, 3]
+			self.conv1 = torch.nn.Conv2d(src_ngrid, 64, 3) # => [64, 11, 1]
 			self.conv2 = torch.nn.Conv2d(64, 16, (3,1))  # => [16,	9, 1]
 			self.maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0)) # => [16, 5, 1]
 			self.leaky_relu = torch.nn.LeakyReLU(0.1)
+			self.grid_emb = torch.nn.Linear(5, d_model_grid) # 5 from [16, 5, 1]
 
-			self.traj_emb = torch.nn.Linear(d_feats, d_model//2)
-			self.soc_emb = torch.nn.Linear(5, d_model//2) # 5 from [16, 5, 1]
-		else:
-			self.soc_nch = 0
-			self.traj_emb = torch.nn.Linear(d_feats, d_model)
+		if src_lon > 0:
+			d_model_lon = src_lon * 4
+			d_model -= d_model_lon
+			self.lon_emb = torch.nn.Linear(src_lon, d_model_lon)
+
+		if src_lat > 0:
+			d_model_lat = src_lat * 4
+			d_model -= d_model_lat
+			self.lat_emb = torch.nn.Linear(src_lat, d_model_lat)
+
+		self.traj_emb = torch.nn.Linear(src_feats, d_model)
 
 	def forward(self, x):
 		# workaround to make nn.Sequential work with multiple inputs
 		# cf https://discuss.pytorch.org/t/nn-sequential-layers-forward-with-multiple-inputs-error/35591/3
-		x, soc = x[0], x[1]
+		#x, soc = x[0], x[1]
+		x, grid, lon, lat = x
+
 		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
 
-		if self.soc_nch > 0:
+		if self.grid_emb is not None:
 			pdb.set_trace()
-			assert soc is not None
+			assert grid is not None and grid > 0
 			## Apply convolutional social pooling: => [128, 16, 5, 1]
-			soc_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(soc)))))
-			soc_enc = torch.squeeze(soc_enc) # [128, 16, 5]
-			soc_emb = self.soc_emb(soc_enc)
-			emb = torch.cat((emb,soc_emb), dim=-1)
+			grid_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(grid)))))
+			grid_enc = torch.squeeze(grid_enc) # [128, 16, 5]
+			grid_emb = self.grid_emb(grid_enc)
+			emb = torch.cat((emb, grid_emb), dim=-1)
+
+		if self.lon_emb is not None:
+			assert lon is not None and lon > 0
+			lon_emb = self.lon_emb(lon) # * math.sqrt(self.d_model)
+			emb = torch.cat((emb, lon_emb), dim=-1)
+
+		if self.lat_emb is not None:
+			assert lat is not None and lat > 0
+			lat_emb = self.lat_emb(lon) # * math.sqrt(self.d_model)
+			emb = torch.cat((emb, lat_emb), dim=-1)
 
 		print("EMB:", emb.shape)
 		return emb # * math.sqrt(self.d_model)
@@ -254,7 +284,7 @@ class EncoderDecoder(nn.Module):
 	A standard Encoder-Decoder architecture. Base for this and many 
 	other models.
 	"""
-	def __init__(self, encoder, decoder, src_embed, tgt_embed, generator, generator_lat, generator_lon):
+	def __init__(self, encoder, decoder, src_embed, tgt_embed, generator, generator_lat=None, generator_lon=None):
 		super(EncoderDecoder, self).__init__()
 		self.encoder = encoder
 		self.decoder = decoder
@@ -264,16 +294,16 @@ class EncoderDecoder(nn.Module):
 		self.generator_lat = generator_lat
 		self.generator_lon = generator_lon
 		
-	def forward(self, src, tgt, src_mask, tgt_mask, soc=None):
+	def forward(self, src, tgt, src_mask, tgt_mask, src_grid=None, src_lon=0, src_lat=0):
 		"Take in and process masked src and target sequences."
-		return self.decode(self.encode(src, src_mask, soc), src_mask,
+		return self.decode(self.encode(src, src_mask, src_grid, src_lon, src_lat), src_mask,
 							tgt, tgt_mask)
 	
-	def encode(self, src, src_mask, soc=None):
-		return self.encoder(self.src_embed((src, soc)), src_mask)
+	def encode(self, src, src_mask, src_grid=None, src_lon=0, src_lat=0):
+		return self.encoder(self.src_embed((src, src_grid, src_lon, src_lat)), src_mask)
 	
 	def decode(self, memory, src_mask, tgt, tgt_mask):
-		return self.decoder(self.tgt_embed((tgt, None)), memory, src_mask, tgt_mask)
+		return self.decoder(self.tgt_embed((tgt, None, 0, 0)), memory, src_mask, tgt_mask)
 
 
 # ---------- GENERATOR: for final output ----------
@@ -325,23 +355,33 @@ class GeneratorLon(nn.Module):
 
 # ---------- FULL MODEL ----------
 
-def make_model(src_feats, tgt_feats, tgt_params, N=6, 
-			   soc_nch=0, soc_grid=(13,3),
-			   d_model=512, d_ff=2048, h=8, dropout=0.1):
+def make_model(src_feats, tgt_feats, N=6, 
+			   d_model=512, d_ff=2048, h=8, dropout=0.1,
+			   src_ngrid=0, src_grid=(13,3), # for 2D image like input features
+			   src_lon=0, src_lat=0, # additional input features (TODO: list for genericity)
+			   tgt_params=5, tgt_classes=0): # params for regression & classification pbs
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
 	attn = MultiHeadedAttention(h, d_model)
 	ff = PositionwiseFeedForward(d_model, d_ff, dropout)
 	position = PositionalEncoding(d_model, dropout)
-	model = EncoderDecoder(
-		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
-		Decoder(DecoderLayer(d_model, c(attn), c(attn), 
-							 c(ff), dropout), N),
-		nn.Sequential(Embeddings(d_model, src_feats, soc_nch, soc_grid), c(position)),
-		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
-		Generator(d_model, tgt_params),
-		GeneratorLat(d_model),
-		GeneratorLon(d_model))
+
+	if tgt_classes > 0:
+		model = EncoderDecoder(
+			Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
+			Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
+			nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat), c(position)),
+			nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
+			Generator(d_model, tgt_params),
+			GeneratorLat(d_model),
+			GeneratorLon(d_model))
+	else:	
+		model = EncoderDecoder(
+			Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
+			Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
+			nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat), c(position)),
+			nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
+			Generator(d_model, tgt_params))
 	
 	# This was important from their code. 
 	# Initialize parameters with Glorot / fan_avg.
@@ -357,18 +397,18 @@ class Batch:
 	"Object for holding a batch of data with mask during training."
 	def __init__(self):
 		self.src = None
-		self.soc = None
+		self.src_grid = None
 		self.trg = None
 
-	def transfo(self, source, target, social_context=None):
+	def transfo(self, source, target, source_grid=None):
 		# We want [Batch, Tx, Nx]
 		src = copy.copy(source)
 		src = src.permute(1, 0, 2)
 		self.src = src
 
 		# [Batch, Tx, 13, 3]
-		soc = copy.copy(social_context)
-		self.soc = soc
+		src_grid = copy.copy(source_grid)
+		self.src_grid = src_grid
 
 		# We want [Batch, Ty, Ny]
 		trg = copy.copy(target)
@@ -400,8 +440,8 @@ class Batch:
 		self.ntokens  = torch.from_numpy(np.array([m*Tx]))
 
 		print("SRC:", self.src.shape)
-		if self.soc is not None:
-			print("SOC:", self.soc.shape)
+		if self.src_grid is not None:
+			print("SRC_GRID:", self.src_grid.shape)
 		print("TRG:", self.trg.shape)
 		print("TRG_Y:", self.trg_y.shape)
 
@@ -411,5 +451,5 @@ class Batch:
 			self.trg = self.trg.cuda()
 			self.trg_mask = self.trg_mask.cuda()
 			self.trg_y = self.trg_y.cuda()
-			if self.soc is not None:
-				self.soc = self.soc.cuda()
+			if self.src_grid is not None:
+				self.src_grid = self.src_grid.cuda()
