@@ -18,6 +18,8 @@
 	"num_lon_classes": 2,
 
 	"use_transformer": true,
-	"use_maneuvers": false,
+	"use_maneuvers": true,
+	"use_grid": false,
+
 	"use_attention": false
 }

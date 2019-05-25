@@ -13,7 +13,7 @@ import logging
 import os
 import random
 
-from torchsummary import summary
+#from torchsummary import summary
 
 import pdb
 
@@ -37,7 +37,7 @@ import pdb
 
 args = {}
 args['model_dir'] = 'experiments/baseline' # 'trained_models'
-args['model_dir'] = 'experiments/transformer' # 'trained_models'
+#args['model_dir'] = 'experiments/transformer' # 'trained_models'
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
 

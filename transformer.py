@@ -68,27 +68,27 @@ class Embeddings(nn.Module):
 		# workaround to make nn.Sequential work with multiple inputs
 		# cf https://discuss.pytorch.org/t/nn-sequential-layers-forward-with-multiple-inputs-error/35591/3
 		#x, soc = x[0], x[1]
-		x, grid, lon, lat = x
+		traj, grid, lon, lat = x
+		emb = self.traj_emb(traj) # * math.sqrt(self.d_model)
 
-		emb = self.traj_emb(x) # * math.sqrt(self.d_model)
+		pdb.set_trace()
 
-		if self.grid_emb is not None:
-			pdb.set_trace()
-			assert grid is not None and grid > 0
+		if grid is not None:
+			assert self.grid_emb is not None
 			## Apply convolutional social pooling: => [128, 16, 5, 1]
 			grid_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(grid)))))
 			grid_enc = torch.squeeze(grid_enc) # [128, 16, 5]
 			grid_emb = self.grid_emb(grid_enc)
 			emb = torch.cat((emb, grid_emb), dim=-1)
 
-		if self.lon_emb is not None:
-			assert lon is not None and lon > 0
+		if lon is not None:
+			assert self.lon_emb is not None
 			lon_emb = self.lon_emb(lon) # * math.sqrt(self.d_model)
 			emb = torch.cat((emb, lon_emb), dim=-1)
 
-		if self.lat_emb is not None:
-			assert lat is not None and lat > 0
-			lat_emb = self.lat_emb(lon) # * math.sqrt(self.d_model)
+		if lat is not None:
+			assert self.lat_emb is not None
+			lat_emb = self.lat_emb(lat) # * math.sqrt(self.d_model)
 			emb = torch.cat((emb, lat_emb), dim=-1)
 
 		print("EMB:", emb.shape)
@@ -294,16 +294,16 @@ class EncoderDecoder(nn.Module):
 		self.generator_lat = generator_lat
 		self.generator_lon = generator_lon
 		
-	def forward(self, src, tgt, src_mask, tgt_mask, src_grid=None, src_lon=0, src_lat=0):
+	def forward(self, src, tgt, src_mask, tgt_mask, src_grid=None, src_lon=None, src_lat=None):
 		"Take in and process masked src and target sequences."
 		return self.decode(self.encode(src, src_mask, src_grid, src_lon, src_lat), src_mask,
 							tgt, tgt_mask)
 	
-	def encode(self, src, src_mask, src_grid=None, src_lon=0, src_lat=0):
+	def encode(self, src, src_mask, src_grid=None, src_lon=None, src_lat=None):
 		return self.encoder(self.src_embed((src, src_grid, src_lon, src_lat)), src_mask)
 	
 	def decode(self, memory, src_mask, tgt, tgt_mask):
-		return self.decoder(self.tgt_embed((tgt, None, 0, 0)), memory, src_mask, tgt_mask)
+		return self.decoder(self.tgt_embed((tgt, None, None, None)), memory, src_mask, tgt_mask)
 
 
 # ---------- GENERATOR: for final output ----------
@@ -332,7 +332,6 @@ class GeneratorLat(nn.Module):
 		self.proj = nn.Linear(d_model, 3)
 
 	def forward(self, x):
-		pdb.set_trace()
 		lat_pred = F.softmax(self.proj(x), dim=-1) # [Batch 128, Ty, 3]
 		lat_pred = lat_pred[:, -1, :]
 		lat_pred = torch.squeeze(lat_pred)
@@ -398,9 +397,11 @@ class Batch:
 	def __init__(self):
 		self.src = None
 		self.src_grid = None
+		self.src_lon = None
+		self.src_lat = None
 		self.trg = None
 
-	def transfo(self, source, target, source_grid=None):
+	def transfo(self, source, target, source_grid=None, source_lon=None, source_lat=None):
 		# We want [Batch, Tx, Nx]
 		src = copy.copy(source)
 		src = src.permute(1, 0, 2)
@@ -414,16 +415,28 @@ class Batch:
 		trg = copy.copy(target)
 		trg = trg.permute(1, 0, 2)
 
+		m, Tx, nx = src.shape
+		my, Ty, ny = trg.shape
+		assert m == my, "src and trg batch sizes do not match"
+
+		if source_lon is not None:
+			src_lon = copy.copy(source_lon)
+			src_lon = torch.unsqueeze(src_lon, dim=1)
+			src_lon = torch.repeat_interleave(src_lon, Tx, dim=1)
+			self.src_lon = src_lon
+
+		if source_lat is not None:
+			src_lat = copy.copy(source_lat)
+			src_lat = torch.unsqueeze(src_lat, dim=1)
+			src_lat = torch.repeat_interleave(src_lat, Tx, dim=1)
+			self.src_lat = src_lat
+
 		# ensure sequentiality between input and output of decoder
 		# y(n) depends on y(1)...y(n-1)
 		self.trg = trg[:, :-1, :]	# input  of DECODER
 		self.trg_y = trg[:, 1:, :] # expected output of DECODER
 		# otherwise the decoder just "learns" to copy the input ...
 		# with quickly a loss of 0 during training .....
-
-		m,	 Tx, nx = src.shape
-		my,  Ty, ny = trg.shape
-		assert m == my, "src and trg batch sizes do not match"
 		
 		# encoder has full visibility on all inputs
 		src_mask = np.ones((1, Tx), dtype='uint8')
@@ -453,3 +466,7 @@ class Batch:
 			self.trg_y = self.trg_y.cuda()
 			if self.src_grid is not None:
 				self.src_grid = self.src_grid.cuda()
+			if self.src_lon is not None:
+				self.src_lon = self.src_lon.cuda()
+			if self.src_lat is not None:
+				self.src_lat = self.src_lat.cuda()

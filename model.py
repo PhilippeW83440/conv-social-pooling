@@ -21,6 +21,7 @@ class highwayNet(nn.Module):
 		# Flag for maneuver based (True) vs uni-modal decoder (False)
 		self.use_maneuvers = params.use_maneuvers
 		self.use_transformer = params.use_transformer
+		self.use_grid = params.use_grid
 
 		# Flag for train mode (True) vs test-mode (False)
 		self.train_flag = params.train_flag
@@ -78,9 +79,23 @@ class highwayNet(nn.Module):
 		if self.use_transformer:
 			src_feats = tgt_feats = 2 # (X,Y) point
 			tgt_params = 5 # 5 params for bivariate Gaussian distrib
-			tgt_classes = self.num_lat_classes + self.num_lon_classes
-			#self.transformer = tsf.make_model(src_feats, tgt_feats, tgt_params=5, N=2, soc_nch=self.in_length) # with soc
-			self.transformer = tsf.make_model(src_feats, tgt_feats, N=2, tgt_params=tgt_params, tgt_classes=tgt_classes) # without soc
+
+			if self.use_grid:
+				src_ngrid = self.in_length # with soc
+			else:
+				src_ngrid = 0 # without soc
+
+			if self.use_maneuvers:
+				tgt_classes = self.num_lat_classes + self.num_lon_classes
+				src_lon = self.num_lon_classes; src_lat = self.num_lat_classes
+			else:
+				tgt_classes = 0
+				src_lon = 0; src_lat = 0
+
+			self.transformer = tsf.make_model(src_feats, tgt_feats, N=2, 
+												src_ngrid=src_ngrid, src_lon=src_lon, src_lat=src_lat, 
+												tgt_params=tgt_params, tgt_classes=tgt_classes)
+
 			self.batch = tsf.Batch()
 			print("TRANSFORMER:", self.transformer)
 
@@ -92,17 +107,34 @@ class highwayNet(nn.Module):
 		if self.use_transformer:
 			print("HIST_GRID", hist_grid.shape) # [128, 16, 13, 3]
 			assert fut is not None
-			self.batch.transfo(hist, fut, hist_grid) # hist_grid is for social_context
-			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, self.batch.src_grid)
-			print("OUT:", out.shape)
-			transformer_fut_pred = self.transformer.generator(out)
-			print("TRANSFORMER_FUT_PRED:", transformer_fut_pred.shape)
+
+			if self.use_grid:
+				source_grid = copy.copy(hist_grid)
+			else:
+				source_grid = None
 
 			if self.use_maneuvers:
-				transformer_lat_pred = self.transformer.generator_lat(out)
-				transformer_lon_pred = self.transformer.generator_lon(out)
-				print("TRANSFORMER_LAT_PRED:", transformer_lat_pred.shape)
-				print("TRANSFORMER_LON_PRED:", transformer_lon_pred.shape)
+				source_lon = lon_enc; source_lat = lat_enc
+			else:
+				source_lon = None; source_lat = None
+
+			self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=source_lon, source_lat=source_lat)
+
+			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
+											src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
+			print("OUT:", out.shape)
+
+			fut_pred = self.transformer.generator(out)
+			print("TRANSFORMER_FUT_PRED:", fut_pred.shape)
+
+			if self.use_maneuvers:
+				lat_pred = self.transformer.generator_lat(out)
+				lon_pred = self.transformer.generator_lon(out)
+				print("TRANSFORMER_LAT_PRED:", lat_pred.shape)
+				print("TRANSFORMER_LON_PRED:", lon_pred.shape)
+				return fut_pred, lat_pred, lon_pred
+			else:
+				return fut_pred
 
 		## Forward pass hist:
 		# hist:				 [3sec 16, batch 128,  xy 2]
