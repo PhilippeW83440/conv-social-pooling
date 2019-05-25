@@ -114,26 +114,46 @@ class highwayNet(nn.Module):
 				source_grid = None
 
 			if self.use_maneuvers:
-				source_lon = lon_enc; source_lat = lat_enc
-			else:
-				source_lon = None; source_lat = None
 
-			self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=source_lon, source_lat=source_lat)
+				if self.train_flag:
+					source_lon = lon_enc; source_lat = lat_enc
+					self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=source_lon, source_lat=source_lat)
+					out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
+													src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
+					fut_pred = self.transformer.generator(out)
+					print("OUT:", out.shape); print("FUT_PRED:", fut_pred.shape)
+				else:
+					fut_pred = []
+					## Predict trajectory distributions for each maneuver class
+					for k in range(self.num_lon_classes):
+						for l in range(self.num_lat_classes):
+							lat_enc_tmp = torch.zeros_like(lat_enc)
+							lon_enc_tmp = torch.zeros_like(lon_enc)
+							lat_enc_tmp[:, l] = 1
+							lon_enc_tmp[:, k] = 1
 
-			out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
-											src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
-			print("OUT:", out.shape)
+							source_lon = lon_enc_tmp; source_lat = lat_enc_tmp
+							self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=source_lon, source_lat=source_lat)
+							out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
+															src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
+							fut_pred_tmp = self.transformer.generator(out)
 
-			fut_pred = self.transformer.generator(out)
-			print("TRANSFORMER_FUT_PRED:", fut_pred.shape)
+							fut_pred.append(fut_pred_tmp)
 
-			if self.use_maneuvers:
+				# TODO: this is not good; use 2 Transformers or at least 2 different models, 1 for Regression and 1 for Classif
+				# We can not use the lon/lat features for the lon/lat classifier ...
+				# First without lon/lat features, predict lon/lat classes; THEN predict Traj with lon/lat features
 				lat_pred = self.transformer.generator_lat(out)
 				lon_pred = self.transformer.generator_lon(out)
-				print("TRANSFORMER_LAT_PRED:", lat_pred.shape)
-				print("TRANSFORMER_LON_PRED:", lon_pred.shape)
+				print("LAT_PRED:", lat_pred.shape); print("LON_PRED:", lon_pred.shape)
 				return fut_pred, lat_pred, lon_pred
 			else:
+				self.batch.transfo(hist, fut, source_grid=source_grid)
+				out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
+				fut_pred = self.transformer.generator(out)
+
+				print("OUT:", out.shape)
+				print("FUT_PRED:", fut_pred.shape)
 				return fut_pred
 
 		## Forward pass hist:
