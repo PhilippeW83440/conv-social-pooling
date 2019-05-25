@@ -71,8 +71,6 @@ class Embeddings(nn.Module):
 		traj, grid, lon, lat = x
 		emb = self.traj_emb(traj) # * math.sqrt(self.d_model)
 
-		pdb.set_trace()
-
 		if grid is not None:
 			assert self.grid_emb is not None
 			## Apply convolutional social pooling: => [128, 16, 5, 1]
@@ -416,6 +414,12 @@ class Batch:
 		trg = trg.permute(1, 0, 2)
 
 		m, Tx, nx = src.shape
+
+		pdb.set_trace()
+		# Create a fake Transformer "start symbol/step" by repeating "end of input" in beginning of trg
+		# The "start symbol" is pretty common for NMT taks; do something similar here
+		trg = torch.cat((src[:,-1,:].unsqueeze(1), trg), dim=1)
+
 		my, Ty, ny = trg.shape
 		assert m == my, "src and trg batch sizes do not match"
 

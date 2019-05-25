@@ -37,7 +37,7 @@ import pdb
 
 args = {}
 args['model_dir'] = 'experiments/baseline' # 'trained_models'
-#args['model_dir'] = 'experiments/transformer' # 'trained_models'
+args['model_dir'] = 'experiments/transformer' # 'trained_models'
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
 
@@ -150,6 +150,8 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				l = maskedMSE(fut_pred, fut, op_mask)
 			else:
 				l = maskedNLL(fut_pred, fut, op_mask)
+
+		print("LOSS:", l)
 
 		# Backprop and update weights
 		optimizer.zero_grad()
