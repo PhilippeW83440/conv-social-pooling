@@ -35,9 +35,9 @@ import pdb
 #args['use_maneuvers'] = True
 
 args = {}
-args['model_dir'] = 'experiments/baseline' # 'trained_models'
 args['model_dir'] = 'experiments/transformer' # 'trained_models'
 args['model_dir'] = 'experiments/seq2seq' # 'trained_models'
+args['model_dir'] = 'experiments/baseline' # 'trained_models'
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
 

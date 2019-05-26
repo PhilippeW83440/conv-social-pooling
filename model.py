@@ -82,7 +82,10 @@ class highwayNet(nn.Module):
 		self.ip_emb = torch.nn.Linear(2,self.input_embedding_size)
 
 		# Encoder LSTM
-		self.enc_lstm = torch.nn.LSTM(self.input_embedding_size,self.encoder_size,1)
+		if self.use_bidir:
+			self.enc_lstm = torch.nn.LSTM(self.input_embedding_size, self.encoder_size, 1, bidirectional=True)
+		else:
+			self.enc_lstm = torch.nn.LSTM(self.input_embedding_size, self.encoder_size, 1)
 
 		# Vehicle dynamics embedding
 		self.dyn_emb = torch.nn.Linear(self.encoder_size,self.dyn_embedding_size)
@@ -95,8 +98,6 @@ class highwayNet(nn.Module):
 		# FC social pooling layer (for comparison):
 		# self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth)
 
-		
-		
 		if self.use_seq2seq:# Decoder seq2seq LSTM
 			if self.use_maneuvers:
 				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
@@ -183,22 +184,38 @@ class highwayNet(nn.Module):
 		## Forward pass hist:
 		# hist:				 [3sec 16, batch 128,  xy 2]
 		# self.ip_emb(hist): [16, 128, 32] via nn.Linear(2, 32)
+
 		# an, (hn, cn)	   : via nn.LSTM(in 32, hid 64)
 		# we retrieve hn   : [ 1, 128, 64]	 NB: note that an [16, 128, 64] is not used (will be used for ATTENTION)
+		# hist_a: [Tx 16, Batch 128, Dir * enc_size] TODO to be used by ATTENTION
 		# hist_enc =  hn   : [ layers 1, batch 128, hid 64]
+
 		# hist_enc		   : [ 128, 64] via reshaping (cf hist_enc.view(...))
 		# hist_enc		   : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
-		_,(hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
+		hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
+		if self.use_bidir: # sum bidir outputs
+			# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
+			# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
+			hist_enc = hist_enc[0, :, :] + hist_enc[1, :, :]
+			hist_enc = hist_enc.unsqueeze(0)
 		hist_enc = self.leaky_relu(self.dyn_emb(hist_enc.view(hist_enc.shape[1],hist_enc.shape[2])))
 
 		## Forward pass nbrs
 		# nbrs:				 [3sec 16, #nbrs_hist as much as we found in 128x13x3 eg 850, xy 2]
 		# self.ip_emb(nbrs): [16, 850, 32] vi nn.Linear(2, 32)
+
 		# an, (hn, cn)	   : via nn.LSTM(in 32, hid64)
 		# we retrieve hn   : [1, 850, 64]	NB: note that an [16, 850, 64] is not used
+		# nbrs_a: [Tx 16, 850, Dir * enc_size] TODO to be used by ATTENTION
+
 		# nbrs_enc		   : [850, 64] via reshaping
 		# the traj hist of 3 secs of (X,Y)rel coords is tranformed into 64 features
-		_, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
+		nbrs_a, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
+		if self.use_bidir: # sum bidir outputs
+			# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
+			# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
+			nbrs_enc = nbrs_enc[0, :, :] + nbrs_enc[1, :, :]
+			nbrs_enc = nbrs_enc.unsqueeze(0)
 		nbrs_enc = nbrs_enc.view(nbrs_enc.shape[1], nbrs_enc.shape[2])
 
 		## Masked scatter
