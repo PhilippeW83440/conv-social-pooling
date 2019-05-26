@@ -20,8 +20,17 @@ class highwayNet(nn.Module):
 
 		# Flag for maneuver based (True) vs uni-modal decoder (False)
 		self.use_maneuvers = params.use_maneuvers
-		self.use_transformer = params.use_transformer
 		self.use_grid = params.use_grid
+
+		# Transformer architecture related
+		self.use_transformer = params.use_transformer
+
+		# RNN-LSTM Seq2seq architecture related
+		self.use_seq2seq = params.use_seq2seq
+		self.use_bidir = params.use_bidir
+
+		# RNN-LSTM with Attention architecture related
+		self.use_attention = params.use_attention
 
 		# Flag for train mode (True) vs test-mode (False)
 		self.train_flag = params.train_flag

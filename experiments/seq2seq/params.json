@@ -20,7 +20,7 @@
 	"use_grid": true,
 	"use_maneuvers": true,
 
-	"use_seq2seq": false,
+	"use_seq2seq": true,
 	"use_bidir": false,
 
 	"use_attention": false,
