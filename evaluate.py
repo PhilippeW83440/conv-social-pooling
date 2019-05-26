@@ -53,7 +53,8 @@ metric = 'rmse'	#or rmse
 
 
 # Initialize network
-net = highwayNet(params)
+batch_size=128
+net = highwayNet(params, batch_size)
 
 net_path = os.path.join(args['model_dir'], 'best.pth.tar')
 assert os.path.isfile(net_path), "No net file found at {}".format(net_path)
@@ -69,7 +70,7 @@ net.eval()
 
 logging.info("Loading the datasets...")
 tsSet = ngsimDataset('data/TestSet.mat')
-tsDataloader = DataLoader(tsSet,batch_size=128,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
+tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
 
 lossVals = torch.zeros(25).cuda()
 counts = torch.zeros(25).cuda()

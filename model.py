@@ -9,7 +9,7 @@ import transformer as tsf
 class highwayNet(nn.Module):
 
 	## Initialization
-	def __init__(self,params):
+	def __init__(self,params, batch_size):
 		super(highwayNet, self).__init__()
 
 		## Unpack arguments
@@ -95,11 +95,28 @@ class highwayNet(nn.Module):
 		# FC social pooling layer (for comparison):
 		# self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth)
 
-		# Decoder LSTM
-		if self.use_maneuvers:
-			self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
-		else:
-			self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
+		
+		
+		if self.use_seq2seq:# Decoder seq2seq LSTM
+			if self.use_maneuvers:
+				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
+			else:
+				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
+
+			if self.use_cuda:
+				self.h0 = torch.zeros(1, batch_size, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
+				self.c0 = torch.zeros(1, batch_size, self.decoder_size).cuda() # [1, 128, 128]
+			else:
+				self.h0 = torch.zeros(1, batch_size, self.decoder_size) # [1, 128, 128]
+				self.c0 = torch.zeros(1, batch_size, self.decoder_size) # [1, 128, 128]
+
+			self.dec_seq2seq = torch.nn.LSTM(self.decoder_size, self.decoder_size)
+		else: # Legacy Decoder LSTM
+			if self.use_maneuvers:
+				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
+			else:
+				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
+
 
 		# Output layers:
 		self.op = torch.nn.Linear(self.decoder_size,5)
@@ -243,13 +260,27 @@ class highwayNet(nn.Module):
 
 
 	def decode(self,enc):
-		# enc: [batch 128, feats 117]
-		# we just repeat hn output, not using a_1 up to a_Tx (TODO via ATTENTION)
-		# enc: [5sec 25, batch 128, feats 117] after repeat
-		enc = enc.repeat(self.out_length, 1, 1)
-		# And now we retrieve the T_y=25 outputs and discard (hn, cn)
-		# h_dec: [25, 128, 128] via nn.LSTM(feats 117, hid 128)
-		h_dec, _ = self.dec_lstm(enc)
+
+		if self.use_seq2seq:
+			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
+			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
+			yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
+			h_dec = yn
+			for t in range(self.out_length - 1):
+				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
+				h_dec = torch.cat((h_dec, yn), dim=0)
+
+			#pdb.set_trace()
+			#print(h_dec.shape)
+		else:
+			# enc: [batch 128, feats 117]
+			# we just repeat hn output, not using a_1 up to a_Tx (TODO via ATTENTION)
+			# enc: [5sec 25, batch 128, feats 117] after repeat
+			enc = enc.repeat(self.out_length, 1, 1)
+			# And now we retrieve the T_y=25 outputs and discard (hn, cn)
+			# h_dec: [25, 128, 128] via nn.LSTM(feats 117, hid 128)
+			h_dec, _ = self.dec_lstm(enc)
+
 		# h_dec: [batch 128, Ty 25, hid 128] via permute(1, 0, 2)
 		h_dec = h_dec.permute(1, 0, 2)
 		# fut_pred: [batch 128, Ty 25, bivariate gaussian params 5] via self.op=nn.Linear(128, 5)

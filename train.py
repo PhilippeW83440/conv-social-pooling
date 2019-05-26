@@ -37,6 +37,7 @@ import pdb
 args = {}
 args['model_dir'] = 'experiments/baseline' # 'trained_models'
 args['model_dir'] = 'experiments/transformer' # 'trained_models'
+args['model_dir'] = 'experiments/seq2seq' # 'trained_models'
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
 
@@ -56,7 +57,8 @@ params.model_dir = args['restore_file']
 
 
 # Initialize network
-net = highwayNet(params)
+batch_size = 128
+net = highwayNet(params, batch_size)
 print(net)
 if params.use_cuda:
 	net = net.cuda()
@@ -74,7 +76,6 @@ net.train()
 pretrainEpochs = 5
 trainEpochs = 3
 optimizer = torch.optim.Adam(net.parameters())
-batch_size = 128
 crossEnt = torch.nn.BCELoss()
 
 
@@ -151,7 +152,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			else:
 				l = maskedNLL(fut_pred, fut, op_mask)
 
-		print("LOSS:", l)
+		#print("LOSS:", l)
 
 		# Backprop and update weights
 		optimizer.zero_grad()
