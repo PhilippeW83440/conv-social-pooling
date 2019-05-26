@@ -41,6 +41,33 @@ class highwayNet(nn.Module):
 		self.soc_embedding_size = (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth
 
 		## Define network weights
+		# TRANSFORMER
+		if self.use_transformer:
+			src_feats = tgt_feats = 2 # (X,Y) point
+			tgt_params = 5 # 5 params for bivariate Gaussian distrib
+
+			if self.use_grid:
+				src_ngrid = self.in_length # with soc
+			else:
+				src_ngrid = 0 # without soc
+
+			if self.use_maneuvers:
+				d_lon = self.num_lon_classes
+				d_lat = self.num_lat_classes
+
+				self.transformer_cls = tsf.make_model_cls(src_feats, tgt_feats, tgt_lon_classes = d_lon, tgt_lat_classes = d_lat, 
+															N=2, src_ngrid = src_ngrid)
+				print("TRANSFORMER_CLS:", self.transformer_cls)
+			else:
+				d_lon = 0
+				d_lat = 0
+
+			self.transformer_reg = tsf.make_model_reg(src_feats, tgt_feats, tgt_params=tgt_params, N=2,
+														src_ngrid=src_ngrid, src_lon=d_lon, src_lat=d_lat)
+			print("TRANSFORMER_REG:", self.transformer_reg)
+
+			self.batch = tsf.Batch()
+			return
 
 		# Input embedding layer
 		self.ip_emb = torch.nn.Linear(2,self.input_embedding_size)
@@ -75,30 +102,6 @@ class highwayNet(nn.Module):
 		self.relu = torch.nn.ReLU()
 		self.softmax = torch.nn.Softmax(dim=1)
 
-		# TRANSFORMER
-		if self.use_transformer:
-			src_feats = tgt_feats = 2 # (X,Y) point
-			tgt_params = 5 # 5 params for bivariate Gaussian distrib
-
-			if self.use_grid:
-				src_ngrid = self.in_length # with soc
-			else:
-				src_ngrid = 0 # without soc
-
-			if self.use_maneuvers:
-				tgt_classes = self.num_lat_classes + self.num_lon_classes
-				src_lon = self.num_lon_classes; src_lat = self.num_lat_classes
-			else:
-				tgt_classes = 0
-				src_lon = 0; src_lat = 0
-
-			self.transformer = tsf.make_model(src_feats, tgt_feats, N=2, 
-												src_ngrid=src_ngrid, src_lon=src_lon, src_lat=src_lat, 
-												tgt_params=tgt_params, tgt_classes=tgt_classes)
-
-			self.batch = tsf.Batch()
-			print("TRANSFORMER:", self.transformer)
-
 
 	## Forward Pass
 	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, hist_grid, fut=None):
@@ -114,13 +117,17 @@ class highwayNet(nn.Module):
 				source_grid = None
 
 			if self.use_maneuvers:
+				self.batch.transfo(hist, fut, source_grid=source_grid) # TODO do it once
+				out = self.transformer_cls.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
+				lat_pred = self.transformer_cls.generator_lat(out)
+				lon_pred = self.transformer_cls.generator_lon(out)
+				print("LAT_PRED:", lat_pred.shape); print("LON_PRED:", lon_pred.shape)
 
 				if self.train_flag:
-					source_lon = lon_enc; source_lat = lat_enc
-					self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=source_lon, source_lat=source_lat)
-					out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
-													src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
-					fut_pred = self.transformer.generator(out)
+					self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
+					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
+														src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
+					fut_pred = self.transformer_reg.generator(out)
 					print("OUT:", out.shape); print("FUT_PRED:", fut_pred.shape)
 				else:
 					fut_pred = []
@@ -132,25 +139,16 @@ class highwayNet(nn.Module):
 							lat_enc_tmp[:, l] = 1
 							lon_enc_tmp[:, k] = 1
 
-							source_lon = lon_enc_tmp; source_lat = lat_enc_tmp
-							self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=source_lon, source_lat=source_lat)
-							out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
+							self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc_tmp, source_lat=lat_enc_tmp)
+							out_tmp = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
 															src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
-							fut_pred_tmp = self.transformer.generator(out)
-
+							fut_pred_tmp = self.transformer_reg.generator(out_tmp)
 							fut_pred.append(fut_pred_tmp)
-
-				# TODO: this is not good; use 2 Transformers or at least 2 different models, 1 for Regression and 1 for Classif
-				# We can not use the lon/lat features for the lon/lat classifier ...
-				# First without lon/lat features, predict lon/lat classes; THEN predict Traj with lon/lat features
-				lat_pred = self.transformer.generator_lat(out)
-				lon_pred = self.transformer.generator_lon(out)
-				print("LAT_PRED:", lat_pred.shape); print("LON_PRED:", lon_pred.shape)
 				return fut_pred, lat_pred, lon_pred
 			else:
 				self.batch.transfo(hist, fut, source_grid=source_grid)
-				out = self.transformer.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
-				fut_pred = self.transformer.generator(out)
+				out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
+				fut_pred = self.transformer_reg.generator(out)
 
 				print("OUT:", out.shape)
 				print("FUT_PRED:", fut_pred.shape)

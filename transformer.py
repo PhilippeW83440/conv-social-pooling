@@ -282,7 +282,7 @@ class EncoderDecoder(nn.Module):
 	A standard Encoder-Decoder architecture. Base for this and many 
 	other models.
 	"""
-	def __init__(self, encoder, decoder, src_embed, tgt_embed, generator, generator_lat=None, generator_lon=None):
+	def __init__(self, encoder, decoder, src_embed, tgt_embed, generator=None, generator_lat=None, generator_lon=None):
 		super(EncoderDecoder, self).__init__()
 		self.encoder = encoder
 		self.decoder = decoder
@@ -324,10 +324,10 @@ class Generator(nn.Module):
 
 class GeneratorLat(nn.Module):
 	"Define standard linear + softmax generation step."
-	def __init__(self, d_model):
+	def __init__(self, d_model, tgt_lat_classes):
 		super(GeneratorLat, self).__init__()
 		# 3 classes: right, left, none
-		self.proj = nn.Linear(d_model, 3)
+		self.proj = nn.Linear(d_model, tgt_lat_classes)
 
 	def forward(self, x):
 		lat_pred = F.softmax(self.proj(x), dim=-1) # [Batch 128, Ty, 3]
@@ -337,10 +337,10 @@ class GeneratorLat(nn.Module):
 
 class GeneratorLon(nn.Module):
 	"Define standard linear + softmax generation step."
-	def __init__(self, d_model):
+	def __init__(self, d_model, tgt_lon_classes):
 		super(GeneratorLon, self).__init__()
 		# 2 classes: braking or not
-		self.proj = nn.Linear(d_model, 2)
+		self.proj = nn.Linear(d_model, 2, tgt_lon_classes)
 
 	def forward(self, x):
 		lon_pred = F.softmax(self.proj(x), dim=-1)
@@ -352,33 +352,50 @@ class GeneratorLon(nn.Module):
 
 # ---------- FULL MODEL ----------
 
-def make_model(src_feats, tgt_feats, N=6, 
-			   d_model=512, d_ff=2048, h=8, dropout=0.1,
-			   src_ngrid=0, src_grid=(13,3), # for 2D image like input features
-			   src_lon=0, src_lat=0, # additional input features (TODO: list for genericity)
-			   tgt_params=5, tgt_classes=0): # params for regression & classification pbs
+# This model does not use lon/lat features as inputs
+# But predicts lon/lat maneuvers
+def make_model_cls(src_feats, tgt_feats, tgt_lon_classes=2, tgt_lat_classes=3, 
+					N=6, d_model=512, d_ff=2048, h=8, dropout=0.1,
+					src_ngrid=0, src_grid=(13,3)):
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
 	attn = MultiHeadedAttention(h, d_model)
 	ff = PositionwiseFeedForward(d_model, d_ff, dropout)
 	position = PositionalEncoding(d_model, dropout)
 
-	if tgt_classes > 0:
-		model = EncoderDecoder(
-			Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
-			Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
-			nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat), c(position)),
-			nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
-			Generator(d_model, tgt_params),
-			GeneratorLat(d_model),
-			GeneratorLon(d_model))
-	else:	
-		model = EncoderDecoder(
-			Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
-			Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
-			nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat), c(position)),
-			nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
-			Generator(d_model, tgt_params))
+	model = EncoderDecoder(
+		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
+		Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
+		nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid), c(position)),
+		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
+		generator_lat = GeneratorLat(d_model, tgt_lon_classes),
+		generator_lon = GeneratorLon(d_model, tgt_lat_classes))
+	
+	# This was important from their code. 
+	# Initialize parameters with Glorot / fan_avg.
+	for p in model.parameters():
+		if p.dim() > 1:
+			nn.init.xavier_uniform(p)
+	return model
+
+
+# This model uses lon/lat features as inputs
+# And predicts traj
+def make_model_reg(src_feats, tgt_feats, tgt_params=5, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1,
+			   src_ngrid=0, src_grid=(13,3), # for 2D image like input features
+			   src_lon=0, src_lat=0): # additional input features (TODO: list for genericity)
+	"Helper: Construct a model from hyperparameters."
+	c = copy.deepcopy
+	attn = MultiHeadedAttention(h, d_model)
+	ff = PositionwiseFeedForward(d_model, d_ff, dropout)
+	position = PositionalEncoding(d_model, dropout)
+
+	model = EncoderDecoder(
+		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
+		Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
+		nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat), c(position)),
+		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
+		generator = Generator(d_model, tgt_params))
 	
 	# This was important from their code. 
 	# Initialize parameters with Glorot / fan_avg.
