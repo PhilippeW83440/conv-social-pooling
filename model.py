@@ -2,6 +2,7 @@ from __future__ import division
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
+import torch.nn.functional as F
 from utils import outputActivation
 import pdb
 import transformer as tsf
@@ -64,15 +65,19 @@ class highwayNet(nn.Module):
 				d_lon = self.num_lon_classes
 				d_lat = self.num_lat_classes
 
-				self.transformer_cls = tsf.make_model_cls(src_feats, tgt_feats, tgt_lon_classes = d_lon, tgt_lat_classes = d_lat, 
+				self.transformer_cls = tsf.make_model_cls(src_feats, tgt_feats, 
+															tgt_lon_classes = d_lon, 
+															tgt_lat_classes = d_lat, 
 															N=2, src_ngrid = src_ngrid)
 				print("TRANSFORMER_CLS:", self.transformer_cls)
 			else:
 				d_lon = 0
 				d_lat = 0
 
-			self.transformer_reg = tsf.make_model_reg(src_feats, tgt_feats, tgt_params=tgt_params, N=2,
-														src_ngrid=src_ngrid, src_lon=d_lon, src_lat=d_lat)
+			self.transformer_reg = tsf.make_model_reg(src_feats, tgt_feats, 
+														tgt_params=tgt_params, N=2,
+														src_ngrid=src_ngrid, 
+														src_lon=d_lon, src_lat=d_lat)
 			print("TRANSFORMER_REG:", self.transformer_reg)
 
 			self.batch = tsf.Batch()
@@ -84,8 +89,10 @@ class highwayNet(nn.Module):
 		# Encoder LSTM
 		if self.use_bidir:
 			self.enc_lstm = torch.nn.LSTM(self.input_embedding_size, self.encoder_size, 1, bidirectional=True)
+			self.encoder_ndir = 2
 		else:
 			self.enc_lstm = torch.nn.LSTM(self.input_embedding_size, self.encoder_size, 1)
+			self.encoder_ndir = 1
 
 		# Vehicle dynamics embedding
 		self.dyn_emb = torch.nn.Linear(self.encoder_size,self.dyn_embedding_size)
@@ -98,7 +105,7 @@ class highwayNet(nn.Module):
 		# FC social pooling layer (for comparison):
 		# self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth)
 
-		if self.use_seq2seq:# Decoder seq2seq LSTM
+		if self.use_seq2seq or self.use_attention:# Decoder seq2seq LSTM (Attention buils on top of seq2seq)
 			if self.use_maneuvers:
 				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
 			else:
@@ -117,6 +124,10 @@ class highwayNet(nn.Module):
 				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
 			else:
 				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
+
+		if self.use_attention:
+			self.attn_densor1 = torch.nn.Linear(self.encoder_ndir * self.encoder_size + self.decoder_size, 10)
+			self.attn_densor2 = torch.nn.Linear(10, 1)
 
 
 		# Output layers:
@@ -192,7 +203,7 @@ class highwayNet(nn.Module):
 
 		# hist_enc		   : [ 128, 64] via reshaping (cf hist_enc.view(...))
 		# hist_enc		   : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
-		hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
+		self.hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
 		if self.use_bidir: # sum bidir outputs
 			# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
 			# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
@@ -276,19 +287,26 @@ class highwayNet(nn.Module):
 			return fut_pred
 
 
-	def decode(self,enc):
+	def decode(self, enc):
 
-		if self.use_seq2seq:
+		if self.use_attention: # Attention builds on top of seq2seq
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
 			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
 			yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
 			h_dec = yn
 			for t in range(self.out_length - 1):
+				context = self.one_step_attention(self.hist_a, hn)
 				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
 				h_dec = torch.cat((h_dec, yn), dim=0)
-
-			#pdb.set_trace()
-			#print(h_dec.shape)
+		elif self.use_seq2seq:
+			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
+			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
+			yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
+			h_dec = yn
+			for t in range(self.out_length - 1):
+				context = self.one_step_attention(hist_a, hn)
+				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
+				h_dec = torch.cat((h_dec, yn), dim=0)
 		else:
 			# enc: [batch 128, feats 117]
 			# we just repeat hn output, not using a_1 up to a_Tx (TODO via ATTENTION)
@@ -308,7 +326,27 @@ class highwayNet(nn.Module):
 		# fut_pred: [Ty 25, batch 128, bivariate gaussian params 5] via outputActivation which enforces pred constraints
 		return fut_pred
 
-# TODO, ideas for improvement:
-# 1) Use Attention mechanism
-# 2) Use a real Seq2Seq decoder
-# 3) Transformer
+	def one_step_attention(self, a, h_prev):
+		"""
+		Performs one step of attention: Outputs a context vector computed as a dot product of the attention weights
+		"alphas" and the states "a" of the Bi-LSTM.
+		
+		Arguments:
+		a -- state output of the Bi-LSTM, numpy-array of shape (Tx, m, 2*n_a)
+		h_prev -- previous hidden state of the (post-attention) LSTM, numpy-array of shape (1, m, n_s)
+		
+		Returns:
+		context -- context vector, input of the next (post-attetion) LSTM cell
+		"""
+
+		pdb.set_trace()
+
+		Tx, m, _ = a.shape
+		s_prev = torch.repeat_interleave(h_prev, Tx, dim=0) # => [Tx, m, n_s]
+		concat = torch.cat((a, s_prev), dim=2) # => [Tx, m, 2*n_a + n_s]
+		e = F.tanh(self.attn_densor1(concat)) # => [Tx, m, 10]
+		energies = F.relu(self.attn_densor2(e)) # => [Tx, m, 1]
+		alphas = F.softmax(energies, dim=0) # softmax along Tx dim: [Tx, m, 1]
+		# alphas * a: [Tx, m, 1] * [Tx, m, 2*n_a] => [Tx, m, 2_na]
+		context = torch.sum(alphas * a, dim=0) # => [m, 2*n_a]
+		return context
