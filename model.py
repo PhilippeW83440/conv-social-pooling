@@ -311,7 +311,6 @@ class highwayNet(nn.Module):
 			yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
 			h_dec = yn
 			for t in range(self.out_length - 1):
-				context = self.one_step_attention(hist_a, hn)
 				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
 				h_dec = torch.cat((h_dec, yn), dim=0)
 		else:
