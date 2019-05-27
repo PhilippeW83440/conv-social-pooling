@@ -68,18 +68,18 @@ class highwayNet(nn.Module):
 				d_lat = self.num_lat_classes
 
 				self.transformer_cls = tsf.make_model_cls(src_feats, tgt_feats, 
-															tgt_lon_classes = d_lon, 
-															tgt_lat_classes = d_lat, 
-															N=2, src_ngrid = src_ngrid)
+                                                          tgt_lon_classes = d_lon, 
+                                                          tgt_lat_classes = d_lat, 
+                                                          N=2, src_ngrid = src_ngrid)
 				print("TRANSFORMER_CLS:", self.transformer_cls)
 			else:
 				d_lon = 0
 				d_lat = 0
 
 			self.transformer_reg = tsf.make_model_reg(src_feats, tgt_feats, 
-														tgt_params=tgt_params, N=2,
-														src_ngrid=src_ngrid, 
-														src_lon=d_lon, src_lat=d_lat)
+                                                      tgt_params=tgt_params, N=2,
+                                                      src_ngrid=src_ngrid, 
+                                                      src_lon=d_lon, src_lat=d_lat)
 			print("TRANSFORMER_REG:", self.transformer_reg)
 
 			self.batch = tsf.Batch()
