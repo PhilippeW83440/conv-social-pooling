@@ -158,16 +158,17 @@ class highwayNet(nn.Module):
 				source_grid = None
 
 			if self.use_maneuvers:
-				self.batch.transfo(hist, fut, source_grid=source_grid) # TODO do it once
+				self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
+				#self.batch.transfo(hist, fut, source_grid=source_grid) # TODO do it once
 				out = self.transformer_cls.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
 				lat_pred = self.transformer_cls.generator_lat(out)
 				lon_pred = self.transformer_cls.generator_lon(out)
 				#print("LAT_PRED:", lat_pred.shape); print("LON_PRED:", lon_pred.shape)
 
 				if self.train_flag:
-					self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
-					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
-														src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
+					#self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
+					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid, 
+					                                   src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
 					fut_pred = self.transformer_reg.generator(out)
 					#print("OUT:", out.shape); print("FUT_PRED:", fut_pred.shape)
 				else:
