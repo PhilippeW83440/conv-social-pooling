@@ -20,9 +20,9 @@
 	"use_grid": true,
 	"use_maneuvers": true,
 
-	"use_seq2seq": false,
+	"use_seq2seq": true,
 	"use_bidir": true,
-	"use_attention": true,
+	"use_attention": false,
 
 	"use_transformer": false
 }

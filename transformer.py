@@ -16,7 +16,7 @@ import pdb
 # - DONE Batching
 
 # DONE: add social context
-# WIP : use maneuvers
+# DONE : use maneuvers
 #			- GeneratorLat and GeneratorLon DONE
 #			- Embeddings with traj/grid/lat/lon features DONE
 
@@ -89,7 +89,7 @@ class Embeddings(nn.Module):
 			lat_emb = self.lat_emb(lat) # * math.sqrt(self.d_model)
 			emb = torch.cat((emb, lat_emb), dim=-1)
 
-		print("EMB:", emb.shape)
+		#print("EMB:", emb.shape)
 		return emb # * math.sqrt(self.d_model)
 		#return self.lut(x) * math.sqrt(self.d_model)
 
@@ -432,7 +432,7 @@ class Batch:
 
 		m, Tx, nx = src.shape
 
-		pdb.set_trace()
+		#pdb.set_trace()
 		# Create a fake Transformer "start symbol/step" by repeating "end of input" in beginning of trg
 		# The "start symbol" is pretty common for NMT taks; do something similar here
 		trg = torch.cat((src[:,-1,:].unsqueeze(1), trg), dim=1)
@@ -473,11 +473,11 @@ class Batch:
 
 		self.ntokens  = torch.from_numpy(np.array([m*Tx]))
 
-		print("SRC:", self.src.shape)
-		if self.src_grid is not None:
-			print("SRC_GRID:", self.src_grid.shape)
-		print("TRG:", self.trg.shape)
-		print("TRG_Y:", self.trg_y.shape)
+		#print("SRC:", self.src.shape)
+		#if self.src_grid is not None:
+		#	print("SRC_GRID:", self.src_grid.shape)
+		#print("TRG:", self.trg.shape)
+		#print("TRG_Y:", self.trg_y.shape)
 
 		if torch.cuda.is_available():
 			self.src = self.src.cuda()

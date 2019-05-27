@@ -17,12 +17,12 @@
 	"num_lat_classes": 3,
 	"num_lon_classes": 2,
 
-	"use_grid": true,
-	"use_maneuvers": true,
+	"use_grid": false,
+	"use_maneuvers": false,
 
 	"use_seq2seq": false,
-	"use_bidir": true,
-	"use_attention": true,
+	"use_bidir": false,
+	"use_attention": false,
 
-	"use_transformer": false
+	"use_transformer": true
 }
