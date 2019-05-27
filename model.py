@@ -32,6 +32,8 @@ class highwayNet(nn.Module):
 
 		# RNN-LSTM with Attention architecture related
 		self.use_attention = params.use_attention
+		if self.use_attention:
+			self.use_bidir = True
 
 		# Flag for train mode (True) vs test-mode (False)
 		self.train_flag = params.train_flag
@@ -198,12 +200,14 @@ class highwayNet(nn.Module):
 
 		# an, (hn, cn)	   : via nn.LSTM(in 32, hid 64)
 		# we retrieve hn   : [ 1, 128, 64]	 NB: note that an [16, 128, 64] is not used (will be used for ATTENTION)
-		# hist_a: [Tx 16, Batch 128, Dir * enc_size] TODO to be used by ATTENTION
+		# hist_a: [Tx 16, Batch 128, Dir * enc_size]
 		# hist_enc =  hn   : [ layers 1, batch 128, hid 64]
 
 		# hist_enc		   : [ 128, 64] via reshaping (cf hist_enc.view(...))
 		# hist_enc		   : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
-		self.hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
+		hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
+		self.hist_a = hist_a # [Tx 16, Batch, dir * encoder_size]
+		self.hist_enc = hist_enc  # [dir, Batch, encoder_size]
 		if self.use_bidir: # sum bidir outputs
 			# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
 			# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
@@ -222,6 +226,8 @@ class highwayNet(nn.Module):
 		# nbrs_enc		   : [850, 64] via reshaping
 		# the traj hist of 3 secs of (X,Y)rel coords is tranformed into 64 features
 		nbrs_a, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
+		self.nbrs_a = nbrs_a # [Tx, eg 850, Batch]
+		self.nbrs_enc = nbrs_enc # [dir, eg 850, encoder_size]
 		if self.use_bidir: # sum bidir outputs
 			# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
 			# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
@@ -292,11 +298,12 @@ class highwayNet(nn.Module):
 		if self.use_attention: # Attention builds on top of seq2seq
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
 			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
-			yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
+			context = self.one_step_attention(self.hist_a, self.h0).unsqueeze(0)
+			yn, (hn, cn) = self.dec_seq2seq(context, (self.h0, self.c0))
 			h_dec = yn
 			for t in range(self.out_length - 1):
-				context = self.one_step_attention(self.hist_a, hn)
-				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
+				context = self.one_step_attention(self.hist_a, hn).unsqueeze(0)
+				yn, (hn, cn) = self.dec_seq2seq(context, (hn, cn))
 				h_dec = torch.cat((h_dec, yn), dim=0)
 		elif self.use_seq2seq:
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
@@ -338,13 +345,10 @@ class highwayNet(nn.Module):
 		Returns:
 		context -- context vector, input of the next (post-attetion) LSTM cell
 		"""
-
-		pdb.set_trace()
-
 		Tx, m, _ = a.shape
 		s_prev = torch.repeat_interleave(h_prev, Tx, dim=0) # => [Tx, m, n_s]
 		concat = torch.cat((a, s_prev), dim=2) # => [Tx, m, 2*n_a + n_s]
-		e = F.tanh(self.attn_densor1(concat)) # => [Tx, m, 10]
+		e = (self.attn_densor1(concat)).tanh() # => [Tx, m, 10]
 		energies = F.relu(self.attn_densor2(e)) # => [Tx, m, 1]
 		alphas = F.softmax(energies, dim=0) # softmax along Tx dim: [Tx, m, 1]
 		# alphas * a: [Tx, m, 1] * [Tx, m, 2*n_a] => [Tx, m, 2_na]

@@ -35,8 +35,9 @@ import pdb
 #args['use_maneuvers'] = True
 
 args = {}
-args['model_dir'] = 'experiments/transformer' # 'trained_models'
-args['model_dir'] = 'experiments/seq2seq' # 'trained_models'
+args['model_dir'] = 'experiments/transformer'
+args['model_dir'] = 'experiments/attention'
+args['model_dir'] = 'experiments/seq2seq'
 args['model_dir'] = 'experiments/baseline' # 'trained_models'
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
@@ -55,9 +56,13 @@ params.train_flag = args['train_flag']
 params.model_dir = args['model_dir']
 params.model_dir = args['restore_file']
 
+print("\nEXPERIMENT:", args['model_dir'], "\n")
+
 
 # Initialize network
 batch_size = 128
+# just when using pdb.set_trace() to discriminate batch_size more easily in tensor shape dumps
+#batch_size = 127
 net = highwayNet(params, batch_size)
 print(net)
 if params.use_cuda:
