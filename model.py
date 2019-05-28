@@ -27,7 +27,7 @@ class highwayNet(nn.Module):
 
 		# Transformer architecture related
 		self.use_transformer = params.use_transformer
-		self.teacher_forcing_ratio = 0.0
+		self.teacher_forcing_ratio = 0.0 # TODO ultimately set it at > 0.9
 
 		# RNN-LSTM Seq2seq architecture related
 		self.use_seq2seq = params.use_seq2seq
@@ -86,6 +86,7 @@ class highwayNet(nn.Module):
 			print("TRANSFORMER_REG:", self.transformer_reg)
 
 			self.batch = tsf.Batch()
+			self.transfo_infer = tsf.Infer(self.out_length, batch_size)
 			return
 
 		# Input embedding layer
@@ -165,14 +166,18 @@ class highwayNet(nn.Module):
 			if self.use_maneuvers:
 				self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
 				#self.batch.transfo(hist, fut, source_grid=source_grid) # TODO do it once
-				out = self.transformer_cls.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
+				out = self.transformer_cls.forward(self.batch.src, self.batch.trg, 
+				                                   self.batch.src_mask, self.batch.trg_mask, 
+												   src_grid=self.batch.src_grid)
 				lat_pred = self.transformer_cls.generator_lat(out)
 				lon_pred = self.transformer_cls.generator_lon(out)
 				#print("LAT_PRED:", lat_pred.shape); print("LON_PRED:", lon_pred.shape)
 
 				if self.train_flag:
 					#self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
-					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid, 
+					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, 
+					                                   self.batch.src_mask, self.batch.trg_mask, 
+													   src_grid=self.batch.src_grid, 
 					                                   src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
 					fut_pred = self.transformer_reg.generator(out)
 					#print("OUT:", out.shape); print("FUT_PRED:", fut_pred.shape)
@@ -186,9 +191,13 @@ class highwayNet(nn.Module):
 							lat_enc_tmp[:, l] = 1
 							lon_enc_tmp[:, k] = 1
 
-							self.batch.transfo(hist, fut, source_grid=source_grid, source_lon=lon_enc_tmp, source_lat=lat_enc_tmp)
-							out_tmp = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, 
-															src_grid=self.batch.src_grid, src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
+							self.batch.transfo(hist, fut, source_grid=source_grid, 
+							                   source_lon=lon_enc_tmp, source_lat=lat_enc_tmp)
+
+							out_tmp = self.transformer_reg.forward(self.batch.src, self.batch.trg, 
+							                                       self.batch.src_mask, self.batch.trg_mask, 
+															       src_grid=self.batch.src_grid, 
+																   src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
 							fut_pred_tmp = self.transformer_reg.generator(out_tmp)
 							fut_pred.append(fut_pred_tmp)
 				return fut_pred, lat_pred, lon_pred
@@ -196,10 +205,14 @@ class highwayNet(nn.Module):
 				self.batch.transfo(hist, fut, source_grid=source_grid)
 
 				if use_teacher_forcing:
-					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
+					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, 
+					                                   self.batch.src_mask, self.batch.trg_mask, 
+													   src_grid=self.batch.src_grid)
 					fut_pred = self.transformer_reg.generator(out)
 				else:
-					fut_pred = tsf.seq2seq_decode(self.transformer_reg, self.batch.src, self.batch.src_mask, self.out_length)
+					fut_pred = self.transfo_infer(self.transformer_reg, 
+					                              self.batch.src, self.batch.src_mask, 
+												  self.out_length)
 
 				return fut_pred
 
