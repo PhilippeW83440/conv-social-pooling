@@ -6,9 +6,15 @@ This code is used as a baseline and starting point for further code evolutions a
 
 ### Dependencies
 
-* [PyTorch](https://pytorch.org/get-started/locally/)
-* [NumPy](https://github.com/numpy/numpy/blob/master/INSTALL.rst.txt)
-* [SciPy](https://github.com/scipy/scipy/blob/master/INSTALL.rst.txt)
+We recommend using python3. You may find convenient to use a virtual env.
+
+```bash
+virtualenv -p python3 .env
+source .env/bin/activate
+pip install -r requirements.txt
+```
+
+When you're done working on the project, deactivate the virtual environment with ```deactivate```.
 
 
 # Dataset Preprocessing
