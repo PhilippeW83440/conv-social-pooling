@@ -145,7 +145,7 @@ class highwayNet(nn.Module):
 
 
 	## Forward Pass
-	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, hist_grid, fut=None):
+	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, hist_grid=None, fut=None):
 
 		# TRANSFORMER
 		if self.use_transformer:

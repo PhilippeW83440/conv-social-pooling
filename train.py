@@ -16,6 +16,9 @@ import random
 
 import pdb
 
+#import cProfile
+#cp = cProfile.Profile()
+
 
 ## Network Arguments
 ## cf params.json
@@ -48,9 +51,11 @@ args['model_dir'] = 'experiments/transformer_grid'
 args['model_dir'] = 'experiments/transformer_maneuver'
 
 # Full features: soc/grid + maneuvers
-args['model_dir'] = 'experiments/transformer'
 args['model_dir'] = 'experiments/baseline'
 args['model_dir'] = 'experiments/transformer_simple'
+#args['model_dir'] = 'experiments/transformer'
+args['model_dir'] = 'experiments/baseline'
+args['model_dir'] = 'experiments/seq2seq'
 
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
@@ -126,6 +131,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		logging.info('Training with NLL loss')
 
 
+	#cp.enable()
 	## Train:_____________________________________________________________________
 	net.train_flag = True
 	net.train() # This is super important for Transformer ... as it uses dropouts...
@@ -196,6 +202,8 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 			avg_lon_acc = 0
 			avg_tr_time = 0
 	# ______________________________________________________________________________
+	#cp.disable()
+	#cp.print_stats()
 
 
 
@@ -235,7 +243,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				l = maskedMSE(fut_pred, fut, op_mask)
 			else:
 				# During training with NLL loss, validate with NLL over multi-modal distribution
-				fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
+				fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
 				l = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask,avg_along_time = True)
 				avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 				avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
@@ -249,7 +257,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		avg_val_loss += l.item()
 		val_batch_count += 1
 
-		#batch_time = time.time()-st_time
+		batch_time = time.time()-st_time
 		#print("val batch_time:", batch_time)
 
 	logging.info("Validation loss : {:0.4f} | Val Acc: {:0.4f} {:0.4f}".format(avg_val_loss/val_batch_count, avg_val_lat_acc/val_batch_count*100, avg_val_lon_acc/val_batch_count*100))
