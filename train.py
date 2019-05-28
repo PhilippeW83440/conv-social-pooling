@@ -206,46 +206,48 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 	val_batch_count = 0
 	total_points = 0
 
-	for i, data  in enumerate(valDataloader):
-		st_time = time.time()
-		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
+	with torch.no_grad():
+		for i, data  in enumerate(valDataloader):
+			st_time = time.time()
+			hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
 
+			net.train_flag = False
 
-		if params.use_cuda:
-			hist = hist.cuda()
-			nbrs = nbrs.cuda()
-			mask = mask.cuda()
-			lat_enc = lat_enc.cuda()
-			lon_enc = lon_enc.cuda()
-			fut = fut.cuda()
-			op_mask = op_mask.cuda()
-			hist_grid = hist_grid.cuda()
+			if params.use_cuda:
+				hist = hist.cuda()
+				nbrs = nbrs.cuda()
+				mask = mask.cuda()
+				lat_enc = lat_enc.cuda()
+				lon_enc = lon_enc.cuda()
+				fut = fut.cuda()
+				op_mask = op_mask.cuda()
+				hist_grid = hist_grid.cuda()
 
-		# Forward pass
-		if params.use_maneuvers:
-			if epoch_num < pretrainEpochs:
-				# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
-				net.train_flag = True
-				fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
-				l = maskedMSE(fut_pred, fut, op_mask)
+			# Forward pass
+			if params.use_maneuvers:
+				if epoch_num < pretrainEpochs:
+					# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
+					net.train_flag = True
+					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+					l = maskedMSE(fut_pred, fut, op_mask)
+				else:
+					# During training with NLL loss, validate with NLL over multi-modal distribution
+					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+					l = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask,avg_along_time = True)
+					avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
+					avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
 			else:
-				# During training with NLL loss, validate with NLL over multi-modal distribution
-				fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
-				l = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask,avg_along_time = True)
-				avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
-				avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
-		else:
-			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
-			if epoch_num < pretrainEpochs:
-				l = maskedMSE(fut_pred, fut, op_mask)
-			else:
-				l = maskedNLL(fut_pred, fut, op_mask)
+				fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+				if epoch_num < pretrainEpochs:
+					l = maskedMSE(fut_pred, fut, op_mask)
+				else:
+					l = maskedNLL(fut_pred, fut, op_mask)
 
-		avg_val_loss += l.item()
-		val_batch_count += 1
+			avg_val_loss += l.item()
+			val_batch_count += 1
 
-		batch_time = time.time()-st_time
-		#print("val batch_time:", batch_time)
+			batch_time = time.time()-st_time
+			#print("val batch_time:", batch_time)
 
 	logging.info("Validation loss : {:0.4f} | Val Acc: {:0.4f} {:0.4f}".format(avg_val_loss/val_batch_count, avg_val_lat_acc/val_batch_count*100, avg_val_lon_acc/val_batch_count*100))
 	val_loss.append(avg_val_loss/val_batch_count)
