@@ -42,16 +42,7 @@ args = {}
 args['model_dir'] = 'experiments/baseline'
 args['model_dir'] = 'experiments/seq2seq'
 args['model_dir'] = 'experiments/attention'
-
-# Limited features: 1 at a time
-args['model_dir'] = 'experiments/transformer_simple'
-args['model_dir'] = 'experiments/transformer_grid'
-args['model_dir'] = 'experiments/transformer_maneuver'
-
-# Full features: soc/grid + maneuvers
-#args['model_dir'] = 'experiments/transformer'
-
-args['model_dir'] = 'experiments/baseline' # By default
+args['model_dir'] = 'experiments/transformer'
 
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
