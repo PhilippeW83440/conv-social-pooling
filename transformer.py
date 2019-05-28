@@ -491,3 +491,27 @@ class Batch:
 				self.src_lon = self.src_lon.cuda()
 			if self.src_lat is not None:
 				self.src_lat = self.src_lat.cuda()
+
+def seq2seq_decode(model, src, src_mask, Ty):
+	m, Tx, nx = src.shape
+	memory = model.encode(src, src_mask) # [Batch 128, Tx 16, d_model 512]
+	#ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
+	ys = src[:, -1, :].unsqueeze(1) # [Batch 128, ys.size(1) 1, X/Y 2]
+
+	for i in range(Ty):
+		ys_mask = np.ones( (ys.size(1), ys.size(1)), dtype='uint8')
+		ys_mask = np.tril(ys_mask, 0)
+		ys_mask = np.repeat(ys_mask[np.newaxis, :, :], m, axis=0)
+		ys_mask = torch.from_numpy(ys_mask)
+		if torch.cuda.is_available():
+			ys_mask = ys_mask.cuda()
+
+		out = model.decode(memory, src_mask, ys, ys_mask) # [Batch 128, ys.size(1), d_model 512]
+		fut_pred = model.generator(out) # [ys.size(1), Batch 128, gaussian_params 5]
+		fut_pred = fut_pred.permute(1, 0, 2) # [Batch 128, ys.size(1), gaussian_params 5]
+		next_y = fut_pred[:, -1, 0:2].unsqueeze(1) # [Batch 128, 1, muX/muY 2]
+		ys = torch.cat( (ys, next_y), dim=1) # [Batch 128, ys.size(1)+1, 2]
+
+	fut_pred = fut_pred.permute(1, 0, 2) # [Ty 25, Batch 128, 5]
+	#pdb.set_trace()
+	return fut_pred

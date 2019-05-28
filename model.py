@@ -7,6 +7,7 @@ from utils import outputActivation
 import pdb
 import transformer as tsf
 import copy
+import random
 
 class highwayNet(nn.Module):
 
@@ -26,6 +27,7 @@ class highwayNet(nn.Module):
 
 		# Transformer architecture related
 		self.use_transformer = params.use_transformer
+		self.teacher_forcing_ratio = 0.0
 
 		# RNN-LSTM Seq2seq architecture related
 		self.use_seq2seq = params.use_seq2seq
@@ -152,6 +154,9 @@ class highwayNet(nn.Module):
 			#print("HIST_GRID", hist_grid.shape) # [128, 16, 13, 3]
 			assert fut is not None
 
+			# Determine if we are using teacher forcing this iteration
+			use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
+
 			if self.use_grid:
 				source_grid = copy.copy(hist_grid)
 			else:
@@ -189,11 +194,13 @@ class highwayNet(nn.Module):
 				return fut_pred, lat_pred, lon_pred
 			else:
 				self.batch.transfo(hist, fut, source_grid=source_grid)
-				out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
-				fut_pred = self.transformer_reg.generator(out)
 
-				#print("OUT:", out.shape)
-				#print("FUT_PRED:", fut_pred.shape)
+				if use_teacher_forcing:
+					out = self.transformer_reg.forward(self.batch.src, self.batch.trg, self.batch.src_mask, self.batch.trg_mask, src_grid=self.batch.src_grid)
+					fut_pred = self.transformer_reg.generator(out)
+				else:
+					fut_pred = tsf.seq2seq_decode(self.transformer_reg, self.batch.src, self.batch.src_mask, self.out_length)
+
 				return fut_pred
 
 		## Forward pass hist:
