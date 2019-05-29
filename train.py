@@ -131,7 +131,6 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 
 	for i, data in enumerate(trDataloader):
-
 		st_time = time.time()
 		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
 
@@ -177,6 +176,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 		avg_tr_time += batch_time
 
 		#print("batch_time:", batch_time)
+		#break
 
 		if i%100 == 99:
 			eta = avg_tr_time/100*(len(trSet)/batch_size-i)
@@ -228,16 +228,16 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				if epoch_num < pretrainEpochs:
 					# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
 					net.train_flag = True
-					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 					l = maskedMSE(fut_pred, fut, op_mask)
 				else:
 					# During training with NLL loss, validate with NLL over multi-modal distribution
-					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 					l = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask,avg_along_time = True)
 					avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 					avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
 			else:
-				fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+				fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 				if epoch_num < pretrainEpochs:
 					l = maskedMSE(fut_pred, fut, op_mask)
 				else:
@@ -248,6 +248,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 			batch_time = time.time()-st_time
 			#print("val batch_time:", batch_time)
+			#break
 
 	logging.info("Validation loss : {:0.4f} | Val Acc: {:0.4f} {:0.4f}".format(avg_val_loss/val_batch_count, avg_val_lat_acc/val_batch_count*100, avg_val_lon_acc/val_batch_count*100))
 	val_loss.append(avg_val_loss/val_batch_count)
@@ -265,7 +266,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 							is_best=is_best,
 							checkpoint = args['model_dir'])
 
-	# If best_eval, best_save_path        
+	# If best_eval, best_save_path		  
 	if is_best:
 		logging.info("- Found new best val_loss")
 		best_val_loss = nn_val_loss

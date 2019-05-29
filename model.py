@@ -229,7 +229,7 @@ class highwayNet(nn.Module):
 				lon_pred = self.softmax(self.op_lon(enc))
 
 				if self.train_flag:
-					if use_teacher_forcing:
+					if fut is not None and use_teacher_forcing:
 						self.batch.transfo(hist, target=fut, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
 						out = self.transformer.forward(self.batch.src, self.batch.trg, 
 						                                   self.batch.src_mask, self.batch.trg_mask, 
@@ -261,7 +261,7 @@ class highwayNet(nn.Module):
 							fut_pred.append(fut_pred_tmp)
 				return fut_pred, lat_pred, lon_pred
 			else:
-				if use_teacher_forcing:
+				if fut is not None and use_teacher_forcing:
 					self.batch.transfo(hist, target=fut, source_grid=source_grid)
 					out = self.transformer.forward(self.batch.src, self.batch.trg, 
 					                                   self.batch.src_mask, self.batch.trg_mask, 
