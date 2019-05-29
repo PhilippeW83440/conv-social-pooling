@@ -10,6 +10,8 @@ import os
 import utils_nn as utils
 import logging
 
+from tqdm import tqdm
+
 
 
 ## Network Arguments
@@ -54,6 +56,7 @@ metric = 'rmse'	#or rmse
 
 # Initialize network
 batch_size=128
+batch_size=1024
 net = highwayNet(params, batch_size)
 
 net_path = os.path.join(args['model_dir'], 'best.pth.tar')
@@ -75,49 +78,51 @@ tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8
 lossVals = torch.zeros(25).cuda()
 counts = torch.zeros(25).cuda()
 
-
-for i, data in enumerate(tsDataloader):
-	st_time = time.time()
-	hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask = data
-
-	# Initialize Variables
-	if params.use_cuda:
-		hist = hist.cuda()
-		nbrs = nbrs.cuda()
-		mask = mask.cuda()
-		lat_enc = lat_enc.cuda()
-		lon_enc = lon_enc.cuda()
-		fut = fut.cuda()
-		op_mask = op_mask.cuda()
-
-	if metric == 'nll':
-		# Forward pass
-		if params.use_maneuvers:
-			fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
-			l,c = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask)
+total = len(tsDataloader)
+with torch.no_grad():
+	for i, data in tqdm(enumerate(tsDataloader), total=total):
+		st_time = time.time()
+		hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
+	
+		# Initialize Variables
+		if params.use_cuda:
+			hist = hist.cuda()
+			nbrs = nbrs.cuda()
+			mask = mask.cuda()
+			lat_enc = lat_enc.cuda()
+			lon_enc = lon_enc.cuda()
+			fut = fut.cuda()
+			op_mask = op_mask.cuda()
+			hist_grid.cuda()
+	
+		if metric == 'nll':
+			# Forward pass
+			if params.use_maneuvers:
+				fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+				l,c = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask)
+			else:
+				fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+				l, c = maskedNLLTest(fut_pred, 0, 0, fut, op_mask,use_maneuvers=False)
 		else:
-			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
-			l, c = maskedNLLTest(fut_pred, 0, 0, fut, op_mask,use_maneuvers=False)
-	else:
-		# Forward pass
-		if params.use_maneuvers:
-			fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
-			fut_pred_max = torch.zeros_like(fut_pred[0])
-			for k in range(lat_pred.shape[0]):
-				lat_man = torch.argmax(lat_pred[k, :]).detach()
-				lon_man = torch.argmax(lon_pred[k, :]).detach()
-				indx = lon_man*3 + lat_man
-				fut_pred_max[:,k,:] = fut_pred[indx][:,k,:]
-			l, c = maskedMSETest(fut_pred_max, fut, op_mask)
-		else:
-			fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
-			l, c = maskedMSETest(fut_pred, fut, op_mask)
-
-	#logging.info("Batch {}: l {} c {}".format(i, l, c))
-
-
-	lossVals +=l.detach()
-	counts += c.detach()
+			# Forward pass
+			if params.use_maneuvers:
+				fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+				fut_pred_max = torch.zeros_like(fut_pred[0])
+				for k in range(lat_pred.shape[0]):
+					lat_man = torch.argmax(lat_pred[k, :]).detach()
+					lon_man = torch.argmax(lon_pred[k, :]).detach()
+					indx = lon_man*3 + lat_man
+					fut_pred_max[:,k,:] = fut_pred[indx][:,k,:]
+				l, c = maskedMSETest(fut_pred_max, fut, op_mask)
+			else:
+				fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
+				l, c = maskedMSETest(fut_pred, fut, op_mask)
+	
+		#logging.info("Batch {}: l {} c {}".format(i, l, c))
+		lossVals +=l.detach()
+		counts += c.detach()
+		batch_time = time.time()-st_time
+		#print("eval batch_time:", batch_time)
 
 if metric == 'nll':
 	logging.info("NLL: {}".format(lossVals / counts))

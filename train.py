@@ -15,6 +15,7 @@ import random
 #from torchsummary import summary
 
 import pdb
+from tqdm import tqdm
 
 #import cProfile
 #cp = cProfile.Profile()
@@ -206,8 +207,9 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 	val_batch_count = 0
 	total_points = 0
 
+	total = len(valDataloader)
 	with torch.no_grad():
-		for i, data  in enumerate(valDataloader):
+		for i, data  in tqdm(enumerate(valDataloader), total=total):
 			st_time = time.time()
 			hist, nbrs, mask, lat_enc, lon_enc, fut, op_mask, hist_grid = data
 
