@@ -73,7 +73,7 @@ net.eval()
 
 logging.info("Loading the datasets...")
 tsSet = ngsimDataset('data/TestSet.mat')
-tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
+tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=False,num_workers=8,collate_fn=tsSet.collate_fn)
 
 if params.use_cuda:
 	lossVals = torch.zeros(25).cuda()
@@ -98,7 +98,7 @@ with torch.no_grad():
 			fut = fut.cuda()
 			op_mask = op_mask.cuda()
 			hist_grid.cuda()
-	
+
 		if metric == 'nll':
 			# Forward pass
 			if params.use_maneuvers:

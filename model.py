@@ -9,12 +9,16 @@ import transformer as tsf
 import copy
 import random
 
+
+import logging
+
 class highwayNet(nn.Module):
 
 	## Initialization
 	def __init__(self,params, batch_size):
 		super(highwayNet, self).__init__()
 
+		self.batch_size = batch_size
 		## Unpack arguments
 		self.params = params
 
@@ -179,36 +183,47 @@ class highwayNet(nn.Module):
 
 			# nbrs_enc		   : [850, 64] via reshaping
 			# the traj hist of 3 secs of (X,Y)rel coords is tranformed into 64 features
-			nbrs_a, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
-			self.nbrs_a = nbrs_a # [Tx, eg 850, Batch]
-			self.nbrs_enc = nbrs_enc # [dir, eg 850, encoder_size]
-			if self.use_bidir: # sum bidir outputs
-				# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
-				# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
-				nbrs_enc = nbrs_enc[0, :, :] + nbrs_enc[1, :, :]
-				nbrs_enc = nbrs_enc.unsqueeze(0)
-			nbrs_enc = nbrs_enc.view(nbrs_enc.shape[1], nbrs_enc.shape[2])
 
-			## Masked scatter
-			soc_enc = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
-			soc_enc = soc_enc.masked_scatter_(masks, nbrs_enc) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
-			soc_enc = soc_enc.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
+			_, num_nbrs, _ = nbrs.shape
+			if num_nbrs > 0:
+				nbrs_a, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
+				self.nbrs_a = nbrs_a # [Tx, eg 850, Batch]
+				self.nbrs_enc = nbrs_enc # [dir, eg 850, encoder_size]
+				if self.use_bidir: # sum bidir outputs
+					# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
+					# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
+					nbrs_enc = nbrs_enc[0, :, :] + nbrs_enc[1, :, :]
+					nbrs_enc = nbrs_enc.unsqueeze(0)
+				nbrs_enc = nbrs_enc.view(nbrs_enc.shape[1], nbrs_enc.shape[2])
 
-			# soc_enc: [batch 128, hid 64, grid_lon 13, grid lat 3]
-			# NB: VALID with PyTorch (not SAME default like with TF)
-			# self.soc_conv(soc_enc):  [128, 64, 11, 1] via Conv2d(in 64, out 64, f 3)
-			# self.conv_3x1(...):	   [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
-			# self.soc_maxpool(...):   [128, 16,  5, 1] via MaxPool2d(2, 1)
-			# soc_enc: [128, 80] via reshaping NB: self.soc_embedding_size = 80
+				## Masked scatter
+				soc_enc = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
+				soc_enc = soc_enc.masked_scatter_(masks, nbrs_enc) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
+				soc_enc = soc_enc.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
 
-			## Apply convolutional social pooling:
-			soc_enc = self.soc_maxpool(self.leaky_relu(self.conv_3x1(self.leaky_relu(self.soc_conv(soc_enc)))))
-			soc_enc = soc_enc.view(-1,self.soc_embedding_size)
+				# soc_enc: [batch 128, hid 64, grid_lon 13, grid lat 3]
+				# NB: VALID with PyTorch (not SAME default like with TF)
+				# self.soc_conv(soc_enc):  [128, 64, 11, 1] via Conv2d(in 64, out 64, f 3)
+				# self.conv_3x1(...):	   [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
+				# self.soc_maxpool(...):   [128, 16,  5, 1] via MaxPool2d(2, 1)
+				# soc_enc: [128, 80] via reshaping NB: self.soc_embedding_size = 80
 
-			## Apply fc soc pooling
-			# soc_enc = soc_enc.contiguous()
-			# soc_enc = soc_enc.view(-1, self.soc_conv_depth * self.grid_size[0] * self.grid_size[1])
-			# soc_enc = self.leaky_relu(self.soc_fc(soc_enc))
+				## Apply convolutional social pooling:
+				soc_enc = self.soc_maxpool(self.leaky_relu(self.conv_3x1(self.leaky_relu(self.soc_conv(soc_enc)))))
+				soc_enc = soc_enc.view(-1,self.soc_embedding_size)
+
+				## Apply fc soc pooling
+				# soc_enc = soc_enc.contiguous()
+				# soc_enc = soc_enc.view(-1, self.soc_conv_depth * self.grid_size[0] * self.grid_size[1])
+				# soc_enc = self.leaky_relu(self.soc_fc(soc_enc))
+			else:
+				# FIX for floating point exception when num_nbrs == 0
+				# self.enc_lstm(...) can(t be used with a batch of 0
+				logging.info("ZEROS soc_enc when no nbr")
+				if self.use_cuda:
+					soc_enc = torch.zeros(self.batch_size, self.soc_embedding_size).cuda()
+				else:
+					soc_enc = torch.zeros(self.batch_size, self.soc_embedding_size)
 
 			## Concatenate encodings:
 			# enc: [128, 112] via cat [128, 32] with [128, 80]
