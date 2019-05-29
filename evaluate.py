@@ -75,8 +75,12 @@ logging.info("Loading the datasets...")
 tsSet = ngsimDataset('data/TestSet.mat')
 tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
 
-lossVals = torch.zeros(25).cuda()
-counts = torch.zeros(25).cuda()
+if params.use_cuda:
+	lossVals = torch.zeros(25).cuda()
+	counts = torch.zeros(25).cuda()
+else:
+	lossVals = torch.zeros(25)
+	counts = torch.zeros(25)
 
 total = len(tsDataloader)
 with torch.no_grad():
