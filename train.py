@@ -236,7 +236,10 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 					l = maskedMSE(fut_pred, fut, op_mask)
 				else:
 					# During training with NLL loss, validate with NLL over multi-modal distribution
-					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+					#fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+					# fut => teacher_forcing eval during pretrain, just to speed up pretrain phase
+					# Full (and much slower) eval will be done on Test Set (via evaluate.py): just once
+					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
 					l = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask,avg_along_time = True)
 					avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 					avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
