@@ -57,7 +57,7 @@ metric = 'rmse'	#or rmse
 # Initialize network
 batch_size=128
 batch_size=1024
-net = highwayNet(params, batch_size)
+net = highwayNet(params)
 
 net_path = os.path.join(args['model_dir'], 'best.pth.tar')
 assert os.path.isfile(net_path), "No net file found at {}".format(net_path)

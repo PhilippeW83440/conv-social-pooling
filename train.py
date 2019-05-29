@@ -69,7 +69,7 @@ print("\nEXPERIMENT:", args['model_dir'], "\n")
 batch_size = 128
 # just when using pdb.set_trace() to discriminate batch_size more easily in tensor shape dumps
 #batch_size = 127
-net = highwayNet(params, batch_size)
+net = highwayNet(params)
 print(net)
 if params.use_cuda:
 	net = net.cuda()

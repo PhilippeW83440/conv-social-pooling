@@ -15,10 +15,9 @@ import logging
 class highwayNet(nn.Module):
 
 	## Initialization
-	def __init__(self,params, batch_size):
+	def __init__(self,params):
 		super(highwayNet, self).__init__()
 
-		self.batch_size = batch_size
 		## Unpack arguments
 		self.params = params
 
@@ -113,13 +112,6 @@ class highwayNet(nn.Module):
 				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
 			else:
 				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
-
-			if self.use_cuda:
-				self.h0 = torch.zeros(1, batch_size, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
-				self.c0 = torch.zeros(1, batch_size, self.decoder_size).cuda() # [1, 128, 128]
-			else:
-				self.h0 = torch.zeros(1, batch_size, self.decoder_size) # [1, 128, 128]
-				self.c0 = torch.zeros(1, batch_size, self.decoder_size) # [1, 128, 128]
 
 			self.dec_seq2seq = torch.nn.LSTM(self.decoder_size, self.decoder_size)
 		elif self.use_transformer is False: # Legacy Decoder LSTM
@@ -219,10 +211,11 @@ class highwayNet(nn.Module):
 				# FIX for floating point exception when num_nbrs == 0
 				# self.enc_lstm(...) can(t be used with a batch of 0
 				logging.info("ZEROS soc_enc when no nbr")
+				m = hist.size(1)
 				if self.use_cuda:
-					soc_enc = torch.zeros(self.batch_size, self.soc_embedding_size).cuda()
+					soc_enc = torch.zeros(m, self.soc_embedding_size).cuda()
 				else:
-					soc_enc = torch.zeros(self.batch_size, self.soc_embedding_size)
+					soc_enc = torch.zeros(m, self.soc_embedding_size)
 
 			## Concatenate encodings:
 			# enc: [128, 112] via cat [128, 32] with [128, 80]
@@ -326,6 +319,14 @@ class highwayNet(nn.Module):
 
 
 	def decode(self, enc):
+		if self.use_attention or self.use_seq2seq:
+			m = enc.size(0)
+			if self.use_cuda:
+				self.h0 = torch.zeros(1, m, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
+				self.c0 = torch.zeros(1, m, self.decoder_size).cuda()
+			else:
+				self.h0 = torch.zeros(1, m, self.decoder_size) # [1, 128, 128]
+				self.c0 = torch.zeros(1, m, self.decoder_size)
 
 		if self.use_attention: # Attention builds on top of seq2seq
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
