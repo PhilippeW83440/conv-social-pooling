@@ -440,65 +440,83 @@ class Batch:
 	def __init__(self):
 		self.src = None
 		self.src_grid = None
+		self.src_mask = None
 		self.src_lon = None
 		self.src_lat = None
 		self.trg = None
+		self.trg_mask = None
+		self.trg_y = None
 
-	def transfo(self, source, target, source_grid=None, source_lon=None, source_lat=None):
+	def transfo(self, source, target=None, source_grid=None, source_lon=None, source_lat=None):
 		# We want [Batch, Tx, Nx]
 		src = copy.copy(source)
 		src = src.permute(1, 0, 2)
 		self.src = src
 
+		m, Tx, _ = src.shape
+
 		# [Batch, Tx, 13, 3]
 		src_grid = copy.copy(source_grid)
 		self.src_grid = src_grid
 
-		# We want [Batch, Ty, Ny]
-		trg = copy.copy(target)
-		trg = trg.permute(1, 0, 2)
-
-		m, Tx, nx = src.shape
-
-		# Create a fake Transformer "start symbol/step" by repeating "end of input" in beginning of trg
-		# The "start symbol" is pretty common for NMT taks; do something similar here
-		trg = torch.cat((src[:,-1,:].unsqueeze(1), trg), dim=1)
-
-		my, Ty, ny = trg.shape
-		assert m == my, "src and trg batch sizes do not match"
+		# encoder has full visibility on all inputs
+		src_mask = np.ones((1, Tx), dtype='uint8')
+		#src_mask[:,0] = 0
+		src_mask = np.repeat(src_mask[np.newaxis, :, :], m, axis=0)
+		self.src_mask = torch.from_numpy(src_mask)
 
 		if source_lon is not None:
 			src_lon = copy.copy(source_lon)
 			src_lon = torch.unsqueeze(src_lon, dim=1)
 			src_lon = torch.repeat_interleave(src_lon, Tx, dim=1)
 			self.src_lon = src_lon
+		else:
+			self.src_lon = None
 
 		if source_lat is not None:
 			src_lat = copy.copy(source_lat)
 			src_lat = torch.unsqueeze(src_lat, dim=1)
 			src_lat = torch.repeat_interleave(src_lat, Tx, dim=1)
 			self.src_lat = src_lat
-
-		# ensure sequentiality between input and output of decoder
-		# y(n) depends on y(1)...y(n-1)
-		self.trg = trg[:, :-1, :]	# input  of DECODER
-		self.trg_y = trg[:, 1:, :] # expected output of DECODER
-		# otherwise the decoder just "learns" to copy the input ...
-		# with quickly a loss of 0 during training .....
-		
-		# encoder has full visibility on all inputs
-		src_mask = np.ones((1, Tx), dtype='uint8')
-		#src_mask[:,0] = 0
-		src_mask = np.repeat(src_mask[np.newaxis, :, :], m, axis=0)
-		self.src_mask = torch.from_numpy(src_mask)
-		
-		# decoder at step n, has visibility on y(1)..y(n-1)
-		trg_mask = np.ones((Ty-1,Ty-1), dtype='uint8')
-		trg_mask = np.tril(trg_mask, 0)
-		trg_mask = np.repeat(trg_mask[np.newaxis, :, :], m, axis=0)
-		self.trg_mask = torch.from_numpy(trg_mask)
+		else:
+			self.src_lat = None
 
 		self.ntokens  = torch.from_numpy(np.array([m*Tx]))
+
+		# We want [Batch, Ty, Ny]
+		if target is not None:
+			trg = copy.copy(target)
+			trg = trg.permute(1, 0, 2)
+
+			# Create a fake Transformer "start symbol/step" by repeating "end of input" in beginning of trg
+			# The "start symbol" is pretty common for NMT taks; do something similar here
+			trg = torch.cat((src[:,-1,:].unsqueeze(1), trg), dim=1)
+
+			my, Ty, ny = trg.shape
+			assert m == my, "src and trg batch sizes do not match"
+
+			# ensure sequentiality between input and output of decoder
+			# y(n) depends on y(1)...y(n-1)
+			self.trg = trg[:, :-1, :]	# input  of DECODER
+			self.trg_y = trg[:, 1:, :] # expected output of DECODER
+			# otherwise the decoder just "learns" to copy the input ...
+			# with quickly a loss of 0 during training .....
+			
+			
+			# decoder at step n, has visibility on y(1)..y(n-1)
+			trg_mask = np.ones((Ty-1,Ty-1), dtype='uint8')
+			trg_mask = np.tril(trg_mask, 0)
+			trg_mask = np.repeat(trg_mask[np.newaxis, :, :], m, axis=0)
+			self.trg_mask = torch.from_numpy(trg_mask)
+
+			if torch.cuda.is_available():
+				self.trg = self.trg.cuda()
+				self.trg_y = self.trg_y.cuda()
+				self.trg_mask = self.trg_mask.cuda()
+		else:
+			self.trg = None
+			self.trg_y = None
+			self.trg_mask = None
 
 		#print("SRC:", self.src.shape)
 		#if self.src_grid is not None:
@@ -509,9 +527,6 @@ class Batch:
 		if torch.cuda.is_available():
 			self.src = self.src.cuda()
 			self.src_mask = self.src_mask.cuda()
-			self.trg = self.trg.cuda()
-			self.trg_mask = self.trg_mask.cuda()
-			self.trg_y = self.trg_y.cuda()
 			if self.src_grid is not None:
 				self.src_grid = self.src_grid.cuda()
 			if self.src_lon is not None:
