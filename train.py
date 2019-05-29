@@ -230,7 +230,9 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				if epoch_num < pretrainEpochs:
 					# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
 					net.train_flag = True
-					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+					#fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
+					# fut => teacher_forcing eval during pretrain, just to speed up pretrain phase
+					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
 					l = maskedMSE(fut_pred, fut, op_mask)
 				else:
 					# During training with NLL loss, validate with NLL over multi-modal distribution
@@ -258,7 +260,14 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 	# Save weights
 	nn_val_loss = avg_val_loss/val_batch_count
-	is_best = nn_val_loss < best_val_loss
+
+	if epoch_num < pretrainEpochs:
+		# ignore val_loss during pretrain
+		# as it may be evaluated with teacher_forcing for speedup
+		is_best = False # ignore val_loss during pretrain
+	else:
+		is_best = nn_val_loss < best_val_loss
+
 	utils.save_checkpoint({'epoch': epoch_num + 1,
 							'state_dict': net.state_dict(),
 							'optim_dict' : optimizer.state_dict(), 
