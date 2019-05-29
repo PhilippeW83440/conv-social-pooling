@@ -303,25 +303,34 @@ class EncoderDecoder(nn.Module):
 	def decode(self, memory, src_mask, tgt, tgt_mask):
 		return self.decoder(self.tgt_embed((tgt, None, None, None)), memory, src_mask, tgt_mask)
 
-	def prepare_infer(self, Ty, batch_size):
-		self.ys_masks = []
-		self.Ty = Ty
-		for i in range(Ty):
-			ys_mask = np.ones( (i+1, i+1), dtype='uint8')
-			ys_mask = np.tril(ys_mask, 0)
-			ys_mask = np.repeat(ys_mask[np.newaxis, :, :], batch_size, axis=0)
-			ys_mask = torch.from_numpy(ys_mask)
-			if torch.cuda.is_available():
-				ys_mask = ys_mask.cuda()
-			self.ys_masks.append(ys_mask)
+	#def prepare_infer(self, Ty, batch_size):
+	#	self.ys_masks = []
+	#	self.Ty = Ty
+	#	for i in range(Ty):
+	#		ys_mask = np.ones( (i+1, i+1), dtype='uint8')
+	#		ys_mask = np.tril(ys_mask, 0)
+	#		ys_mask = np.repeat(ys_mask[np.newaxis, :, :], batch_size, axis=0)
+	#		ys_mask = torch.from_numpy(ys_mask)
+	#		if torch.cuda.is_available():
+	#			ys_mask = ys_mask.cuda()
+	#		self.ys_masks.append(ys_mask)
 
-	def infer(self, model, src, src_mask, src_grid=None, src_lon=None, src_lat=None):
+	def infer(self, model, src, src_mask, Ty, src_grid=None, src_lon=None, src_lat=None):
 		m, Tx, nx = src.shape
 		memory = model.encode(src, src_mask, src_grid, src_lon, src_lat) # [Batch 128, Tx 16, d_model 512]
 		ys = src[:, -1, :].unsqueeze(1) # [Batch 128, ys.size(1) 1, X/Y 2]
 	
-		for i in range(self.Ty):
-			out = model.decode(memory, src_mask, ys, self.ys_masks[i]) # [Batch 128, ys.size(1), d_model 512]
+		for i in range(Ty):
+			ys_mask = np.ones( (ys.size(1), ys.size(1)), dtype='uint8')
+			ys_mask = np.tril(ys_mask, 0)
+			ys_mask = np.repeat(ys_mask[np.newaxis, :, :], m, axis=0)
+			ys_mask = torch.from_numpy(ys_mask)
+			if torch.cuda.is_available():
+				ys_mask = ys_mask.cuda()
+
+			#out = model.decode(memory, src_mask, ys, self.ys_masks[i]) # [Batch 128, ys.size(1), d_model 512]
+			# Last batch is usually not of size batch_size ...
+			out = model.decode(memory, src_mask, ys, ys_mask) # [Batch , ys.size(1), d_model 512]
 			fut_pred = model.generator(out) # [ys.size(1), Batch 128, gaussian_params 5]
 			fut_pred = fut_pred.permute(1, 0, 2) # [Batch 128, ys.size(1), gaussian_params 5]
 			next_y = fut_pred[:, -1, 0:2].unsqueeze(1) # [Batch 128, 1, muX/muY 2]

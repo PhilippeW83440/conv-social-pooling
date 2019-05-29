@@ -83,7 +83,6 @@ class highwayNet(nn.Module):
                                               tgt_params=tgt_params, N=2,
                                               src_ngrid=src_ngrid, 
                                               src_lon=d_lon, src_lat=d_lat)
-			self.transformer.prepare_infer(self.out_length, batch_size)
 			print("TRANSFORMER:", self.transformer)
 			self.batch = tsf.Batch()
 
@@ -255,7 +254,8 @@ class highwayNet(nn.Module):
 						self.batch.transfo(hist, source_grid=source_grid, source_lon=lon_enc, source_lat=lat_enc)
 						fut_pred = self.transformer.infer(self.transformer, 
 						                                  self.batch.src, self.batch.src_mask,
-														  src_grid=self.batch.src_grid,
+										  self.out_length,
+										  src_grid=self.batch.src_grid,
 						                                  src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
 				else:
 					fut_pred = []
@@ -271,7 +271,8 @@ class highwayNet(nn.Module):
 							                   source_lon=lon_enc_tmp, source_lat=lat_enc_tmp)
 							fut_pred_tmp = self.transformer.infer(self.transformer, 
 							                                      self.batch.src, self.batch.src_mask,
-															      src_grid=self.batch.src_grid,
+							                                      self.out_length,
+											      src_grid=self.batch.src_grid,
 							                                      src_lon=self.batch.src_lon, src_lat=self.batch.src_lat)
 							fut_pred.append(fut_pred_tmp)
 				return fut_pred, lat_pred, lon_pred
@@ -286,7 +287,8 @@ class highwayNet(nn.Module):
 					self.batch.transfo(hist, source_grid=source_grid)
 					fut_pred = self.transformer.infer(self.transformer, 
 					                                  self.batch.src, self.batch.src_mask,
-													  src_grid=self.batch.src_grid)
+					                                  self.out_length,
+									  src_grid=self.batch.src_grid)
 				return fut_pred
 
 		if self.use_transformer is False:
