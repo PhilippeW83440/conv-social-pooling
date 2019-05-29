@@ -86,7 +86,12 @@ net.train()
 ## Initialize optimizer
 pretrainEpochs = 5
 trainEpochs = 3
-optimizer = torch.optim.Adam(net.parameters())
+
+if params.use_transformer:
+	# Out of Hyper-params search experiments
+	optimizer = torch.optim.Adam(net.parameters(), lr=0.0001)
+else:
+	optimizer = torch.optim.Adam(net.parameters())
 crossEnt = torch.nn.BCELoss()
 
 
