@@ -45,6 +45,8 @@ args['model_dir'] = 'experiments/seq2seq'
 args['model_dir'] = 'experiments/attention'
 args['model_dir'] = 'experiments/transformer'
 
+#args['model_dir'] = 'experiments/seq2seq'
+
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
 
@@ -276,6 +278,8 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 	else:
 		is_best = nn_val_loss < best_val_loss
 
+	# Save also explicitely at every epoch in addition to last/best
+	filename = 'epoch'+str(epoch_num+1)
 	utils.save_checkpoint({'epoch': epoch_num + 1,
 							'state_dict': net.state_dict(),
 							'optim_dict' : optimizer.state_dict(), 
@@ -283,7 +287,8 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 							'val_lat_acc': avg_val_lat_acc/val_batch_count*100,
 							'val_lon_acc': avg_val_lon_acc/val_batch_count*100 },
 							is_best=is_best,
-							checkpoint = args['model_dir'])
+							checkpoint = args['model_dir'],
+							filename)
 
 	# If best_eval, best_save_path		  
 	if is_best:
