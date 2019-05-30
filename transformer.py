@@ -418,7 +418,9 @@ def make_model_cls(src_feats, tgt_feats, tgt_lon_classes=2, tgt_lat_classes=3,
 
 # This model uses lon/lat features as inputs
 # And predicts traj
-def make_model(src_feats, tgt_feats, tgt_params=5, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1,
+#def make_model(src_feats, tgt_feats, tgt_params=5, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1,
+#def make_model(src_feats, tgt_feats, tgt_params=5, N=1, d_model=256, d_ff=1024, h=1, dropout=0.1,
+def make_model(src_feats, tgt_feats, tgt_params=5, N=1, d_model=256, d_ff=256, h=4, dropout=0.1,
 			   src_ngrid=0, src_grid=(13,3), # for 2D image like input features
 			   src_lon=0, src_lat=0): # additional input features (TODO: list for genericity)
 	"Helper: Construct a model from hyperparameters."

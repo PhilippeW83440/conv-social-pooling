@@ -18,7 +18,7 @@
 	"num_lon_classes": 2,
 
 	"use_grid": true,
-	"use_maneuvers": true,
+	"use_maneuvers": false,
 
 	"use_seq2seq": false,
 	"use_bidir": false,

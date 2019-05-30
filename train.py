@@ -46,7 +46,6 @@ args['model_dir'] = 'experiments/attention'
 args['model_dir'] = 'experiments/transformer'
 
 experiment = 'transformer'
-experiment = 'baseline'
 args['model_dir'] = 'experiments/' + experiment
 
 
@@ -74,6 +73,7 @@ print("\nEXPERIMENT:", args['model_dir'], "\n")
 batch_size = 128
 # just when using pdb.set_trace() to discriminate batch_size more easily in tensor shape dumps
 #batch_size = 127
+batch_size = 1024
 net = highwayNet(params)
 print(net)
 if params.use_cuda:
@@ -89,14 +89,15 @@ if params.use_cuda: torch.cuda.manual_seed(230)
 net.train()
 
 ## Initialize optimizer
-pretrainEpochs = 4
+pretrainEpochs = 1
 trainEpochs = 0
 
-if params.use_transformer:
-	# Out of Hyper-params search experiments
-	optimizer = torch.optim.Adam(net.parameters(), lr=0.0001)
-else:
-	optimizer = torch.optim.Adam(net.parameters())
+#if params.use_transformer:
+#	# Out of Hyper-params search experiments
+#	optimizer = torch.optim.Adam(net.parameters(), lr=0.0001)
+#else:
+#	optimizer = torch.optim.Adam(net.parameters())
+optimizer = torch.optim.Adam(net.parameters())
 crossEnt = torch.nn.BCELoss()
 
 

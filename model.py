@@ -30,7 +30,7 @@ class highwayNet(nn.Module):
 
 		# Transformer architecture related
 		self.use_transformer = params.use_transformer
-		self.teacher_forcing_ratio = 1.0 # TODO ultimately set it in [0.9; 1.0]
+		self.teacher_forcing_ratio = 0.0 # TODO ultimately set it in [0.9; 1.0]
 
 		# RNN-LSTM Seq2seq architecture related
 		self.use_seq2seq = params.use_seq2seq
@@ -79,7 +79,7 @@ class highwayNet(nn.Module):
 				d_lat = 0
 
 			self.transformer = tsf.make_model(src_feats, tgt_feats, 
-                                              tgt_params=tgt_params, N=2,
+                                              tgt_params=tgt_params,
                                               src_ngrid=src_ngrid, 
                                               src_lon=d_lon, src_lat=d_lat)
 			print("TRANSFORMER:", self.transformer)
@@ -341,7 +341,8 @@ class highwayNet(nn.Module):
 		elif self.use_seq2seq:
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
 			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
-			yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
+			#yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
+			yn, (hn, cn) = self.dec_seq2seq(yn, (yn, yn))
 			h_dec = yn
 			for t in range(self.out_length - 1):
 				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
