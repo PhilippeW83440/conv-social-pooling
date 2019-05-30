@@ -272,13 +272,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 	# Save weights
 	nn_val_loss = avg_val_loss/val_batch_count
-
-	if epoch_num < pretrainEpochs:
-		# ignore val_loss during pretrain
-		# as it may be evaluated with teacher_forcing for speedup
-		is_best = False # ignore val_loss during pretrain
-	else:
-		is_best = nn_val_loss < best_val_loss
+	is_best = nn_val_loss < best_val_loss
 
 	# Save also explicitely at every epoch in addition to last/best
 	filename = 'epoch'+str(epoch_num+1)
