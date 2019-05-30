@@ -45,7 +45,9 @@ args['model_dir'] = 'experiments/seq2seq'
 args['model_dir'] = 'experiments/attention'
 args['model_dir'] = 'experiments/transformer'
 
-#args['model_dir'] = 'experiments/seq2seq'
+experiment = 'transformer'
+args['model_dir'] = 'experiments/' + experiment
+
 
 args['train_flag'] = True
 args['restore_file'] = None # or 'last' or 'best'
@@ -298,7 +300,10 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 
 	#_____________________________________________________________________________
 
-torch.save(net.state_dict(), 'trained_models/cslstm_m.tar')
+if not os.path.exists('./trained_models'):
+	print("trained_models Directory does not exist! Making directory {}".format('./trained_models'))
+	os.mkdir('./trained_models')
+else:
+	print("./trained_models Directory exists! ")
 
-
-
+torch.save(net.state_dict(), './trained_models/' + experiment + '.tar')
