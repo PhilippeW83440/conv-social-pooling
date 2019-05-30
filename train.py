@@ -46,6 +46,7 @@ args['model_dir'] = 'experiments/attention'
 args['model_dir'] = 'experiments/transformer'
 
 experiment = 'transformer'
+experiment = 'baseline'
 args['model_dir'] = 'experiments/' + experiment
 
 
@@ -88,8 +89,8 @@ if params.use_cuda: torch.cuda.manual_seed(230)
 net.train()
 
 ## Initialize optimizer
-pretrainEpochs = 5
-trainEpochs = 3
+pretrainEpochs = 4
+trainEpochs = 0
 
 if params.use_transformer:
 	# Out of Hyper-params search experiments
@@ -284,7 +285,7 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 							'val_lon_acc': avg_val_lon_acc/val_batch_count*100 },
 							is_best=is_best,
 							checkpoint = args['model_dir'],
-							filename)
+							filename=filename)
 
 	# If best_eval, best_save_path		  
 	if is_best:
