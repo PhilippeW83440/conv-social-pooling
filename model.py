@@ -26,7 +26,12 @@ class highwayNet(nn.Module):
 
 		# Flag for maneuver based (True) vs uni-modal decoder (False)
 		self.use_maneuvers = params.use_maneuvers
-		self.use_grid = params.use_grid
+		if params.use_grid == 2:
+			self.use_grid_soc = True
+			self.use_grid = False
+		else:
+			self.use_grid = params.use_grid
+			self.use_grid_soc = False
 
 		# Transformer architecture related
 		self.use_transformer = params.use_transformer
@@ -66,7 +71,7 @@ class highwayNet(nn.Module):
 			src_feats = tgt_feats = 2 # (X,Y) point
 			tgt_params = 5 # 5 params for bivariate Gaussian distrib
 
-			if self.use_grid:
+			if self.use_grid or self.use_grid_soc:
 				src_ngrid = self.in_length # with soc
 			else:
 				src_ngrid = 0 # without soc
@@ -78,10 +83,17 @@ class highwayNet(nn.Module):
 				d_lon = 0
 				d_lat = 0
 
-			self.transformer = tsf.make_model(src_feats, tgt_feats, 
-                                              tgt_params=tgt_params,
-                                              src_ngrid=src_ngrid, 
-                                              src_lon=d_lon, src_lat=d_lat)
+			if self.use_grid_soc:
+				self.transformer = tsf.make_model(src_feats, tgt_feats, 
+            	                                  tgt_params=tgt_params,
+            	                                  src_ngrid=src_ngrid, 
+            	                                  src_lon=d_lon, src_lat=d_lat,
+            	                                  src_soc_emb_size=self.soc_embedding_size)
+			else:
+				self.transformer = tsf.make_model(src_feats, tgt_feats, 
+            	                                  tgt_params=tgt_params,
+            	                                  src_ngrid=src_ngrid, 
+            	                                  src_lon=d_lon, src_lat=d_lat)
 			print("TRANSFORMER:", self.transformer)
 			self.batch = tsf.Batch()
 
@@ -140,7 +152,7 @@ class highwayNet(nn.Module):
 	## Forward Pass
 	def forward(self,hist,nbrs,masks,lat_enc,lon_enc, hist_grid=None, fut=None):
 
-		if self.use_transformer is False or (self.use_transformer and self.use_maneuvers):
+		if self.use_transformer is False or (self.use_transformer and self.use_maneuvers) or (self.use_transformer and self.use_grid_soc):
 			# For maneuver classification, we do not use a Transformer model. To reduce training time.
 
 			## Forward pass hist:
@@ -178,8 +190,8 @@ class highwayNet(nn.Module):
 			_, num_nbrs, _ = nbrs.shape
 			if num_nbrs > 0:
 				nbrs_a, (nbrs_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(nbrs)))
-				self.nbrs_a = nbrs_a # [Tx, eg 850, Batch]
-				self.nbrs_enc = nbrs_enc # [dir, eg 850, encoder_size]
+				self.nbrs_a = nbrs_a # [Tx, eg 850, encoder_size 64]
+				self.nbrs_enc = nbrs_enc # [dir, eg 850, encoder_size 64]
 				if self.use_bidir: # sum bidir outputs
 					# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
 					# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
@@ -207,15 +219,38 @@ class highwayNet(nn.Module):
 				# soc_enc = soc_enc.contiguous()
 				# soc_enc = soc_enc.view(-1, self.soc_conv_depth * self.grid_size[0] * self.grid_size[1])
 				# soc_enc = self.leaky_relu(self.soc_fc(soc_enc))
+
+				# FEATURE use_grid_soc
+				if self.use_transformer and self.use_grid_soc:
+					Tx = nbrs_a.size(0); m = masks.size(0)
+					if self.use_cuda:
+						soc_encs = torch.zeros(m, Tx, self.soc_embedding_size).cuda()
+					else:
+						soc_encs = torch.zeros(m, Tx, self.soc_embedding_size)
+					for t in range(Tx):
+						nbrs_enct = nbrs_a[t, :, :]
+						#nbrs_enc = nbrs_enc.view(nbrs_enc.shape[1], nbrs_enc.shape[2])
+						soc_enct = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
+						soc_enct = soc_enct.masked_scatter_(masks, nbrs_enct) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
+						soc_enct = soc_enct.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
+						soc_enct = self.soc_maxpool(self.leaky_relu(self.conv_3x1(self.leaky_relu(self.soc_conv(soc_enct)))))
+						soc_enct = soc_enct.view(-1,self.soc_embedding_size)
+						soc_encs[:, t, :] = soc_enct
+
 			else:
 				# FIX for floating point exception when num_nbrs == 0
 				# self.enc_lstm(...) can(t be used with a batch of 0
 				logging.info("ZEROS soc_enc when no nbr")
-				m = hist.size(1)
+				#m = hist.size(1)
+				Tx = nbrs_a.size(0); m = masks.size(0)
 				if self.use_cuda:
 					soc_enc = torch.zeros(m, self.soc_embedding_size).cuda()
+					if self.use_transformer and self.use_grid_soc:
+						soc_encs = torch.zeros(m, Tx, self.soc_embedding_size).cuda()
 				else:
 					soc_enc = torch.zeros(m, self.soc_embedding_size)
+					if self.use_transformer and self.use_grid_soc:
+						soc_encs = torch.zeros(m, Tx, self.soc_embedding_size)
 
 			## Concatenate encodings:
 			# enc: [128, 112] via cat [128, 32] with [128, 80]
@@ -225,7 +260,9 @@ class highwayNet(nn.Module):
 			# Determine if we are using teacher forcing this iteration
 			use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
 
-			if self.use_grid:
+			if self.use_grid_soc:
+				source_grid = soc_encs # [Batch, Tx, 80 feats]
+			elif self.use_grid:
 				#print("HIST_GRID", hist_grid.shape) # [128, 16, 13, 3]
 				source_grid = copy.copy(hist_grid)
 			else:

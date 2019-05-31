@@ -24,7 +24,7 @@ import pdb
 # ---------- EMBEDDINGS ----------
 
 class Embeddings(nn.Module):
-	def __init__(self, d_model, src_feats, src_ngrid=0, src_grid=(13,3), src_lon=0, src_lat=0):
+	def __init__(self, d_model, src_feats, src_ngrid=0, src_grid=(13,3), src_lon=0, src_lat=0, soc_emb_size=0):
 		super(Embeddings, self).__init__()
 		#self.lut = nn.Embedding(vocab, d_model)
 		self.d_model = copy.copy(d_model)
@@ -33,6 +33,9 @@ class Embeddings(nn.Module):
 		self.grid_emb = None
 		self.lat_emb = None
 		self.lon_emb = None
+		self.soc_emb = None
+
+		self.soc_emb_size = soc_emb_size
 
 		# Baiscally out of the 512 features for d_model encoding we split as:
 		#	256 features for ego traj inputs
@@ -51,6 +54,9 @@ class Embeddings(nn.Module):
 			self.maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0)) # => [16, 5, 1]
 			self.leaky_relu = torch.nn.LeakyReLU(0.1)
 			self.grid_emb = torch.nn.Linear(5, d_model_grid) # 5 from [16, 5, 1]
+
+			if soc_emb_size > 0:
+				self.soc_emb = torch.nn.Linear(soc_emb_size, d_model_grid) # projection
 
 		if src_lon > 0:
 			d_model_lon = src_lon * 4
@@ -72,12 +78,17 @@ class Embeddings(nn.Module):
 		emb = self.traj_emb(traj) # * math.sqrt(self.d_model)
 
 		if grid is not None:
-			assert self.grid_emb is not None
-			## Apply convolutional social pooling: => [128, 16, 5, 1]
-			grid_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(grid)))))
-			grid_enc = torch.squeeze(grid_enc) # [128, 16, 5]
-			grid_emb = self.grid_emb(grid_enc)
-			emb = torch.cat((emb, grid_emb), dim=-1)
+			if len(grid.shape) == 3: # 1D input
+				assert self.soc_emb is not None
+				soc_emb = self.soc_emb(grid) # * math.sqrt(self.d_model)
+				emb = torch.cat((emb, soc_emb), dim=-1)
+			else: # 2D input
+				assert self.grid_emb is not None
+				## Apply convolutional social pooling: => [128, 16, 5, 1]
+				grid_enc = self.maxpool(self.leaky_relu(self.conv2(self.leaky_relu(self.conv1(grid)))))
+				grid_enc = torch.squeeze(grid_enc) # [128, 16, 5]
+				grid_emb = self.grid_emb(grid_enc)
+				emb = torch.cat((emb, grid_emb), dim=-1)
 
 		if lon is not None:
 			assert self.lon_emb is not None
@@ -393,7 +404,7 @@ class GeneratorLon(nn.Module):
 # DEPRECATED
 def make_model_cls(src_feats, tgt_feats, tgt_lon_classes=2, tgt_lat_classes=3, 
 					N=6, d_model=512, d_ff=2048, h=8, dropout=0.1,
-					src_ngrid=0, src_grid=(13,3)):
+					src_ngrid=0, src_grid=(13,3), src_soc_emb_size=0):
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
 	attn = MultiHeadedAttention(h, d_model)
@@ -403,7 +414,7 @@ def make_model_cls(src_feats, tgt_feats, tgt_lon_classes=2, tgt_lat_classes=3,
 	model = EncoderDecoder(
 		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
 		Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
-		nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid), c(position)),
+		nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_soc_emb_size), c(position)),
 		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
 		generator_lat = GeneratorLat(d_model, tgt_lon_classes),
 		generator_lon = GeneratorLon(d_model, tgt_lat_classes))
@@ -422,6 +433,7 @@ def make_model_cls(src_feats, tgt_feats, tgt_lon_classes=2, tgt_lat_classes=3,
 #def make_model(src_feats, tgt_feats, tgt_params=5, N=1, d_model=256, d_ff=1024, h=1, dropout=0.1,
 def make_model(src_feats, tgt_feats, tgt_params=5, N=1, d_model=256, d_ff=256, h=4, dropout=0.1,
 			   src_ngrid=0, src_grid=(13,3), # for 2D image like input features
+			   src_soc_emb_size = 0,
 			   src_lon=0, src_lat=0): # additional input features (TODO: list for genericity)
 	"Helper: Construct a model from hyperparameters."
 	c = copy.deepcopy
@@ -432,7 +444,7 @@ def make_model(src_feats, tgt_feats, tgt_params=5, N=1, d_model=256, d_ff=256, h
 	model = EncoderDecoder(
 		Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
 		Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
-		nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat), c(position)),
+		nn.Sequential(Embeddings(d_model, src_feats, src_ngrid, src_grid, src_lon, src_lat, src_soc_emb_size), c(position)),
 		nn.Sequential(Embeddings(d_model, tgt_feats), c(position)),
 		generator = Generator(d_model, tgt_params))
 	
@@ -466,7 +478,7 @@ class Batch:
 
 		m, Tx, _ = src.shape
 
-		# [Batch, Tx, 13, 3]
+		# [Batch, Tx, 13, 3] for grid or [Batch, Tx, 80] for grid_soc
 		src_grid = copy.copy(source_grid)
 		self.src_grid = src_grid
 
@@ -538,8 +550,6 @@ class Batch:
 		if torch.cuda.is_available():
 			self.src = self.src.cuda()
 			self.src_mask = self.src_mask.cuda()
-			if self.src_grid is not None:
-				self.src_grid = self.src_grid.cuda()
 			if self.src_lon is not None:
 				self.src_lon = self.src_lon.cuda()
 			if self.src_lat is not None:
