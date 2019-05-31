@@ -45,7 +45,7 @@ args['model_dir'] = 'experiments/seq2seq'
 args['model_dir'] = 'experiments/attention'
 args['model_dir'] = 'experiments/transformer'
 
-experiment = 'transformer'
+experiment = 'baseline'
 args['model_dir'] = 'experiments/' + experiment
 
 
@@ -88,8 +88,8 @@ if params.use_cuda: torch.cuda.manual_seed(230)
 net.train()
 
 ## Initialize optimizer
-pretrainEpochs = 1
-trainEpochs = 0
+pretrainEpochs = 0
+trainEpochs = 1
 
 #if params.use_transformer:
 #	# Out of Hyper-params search experiments
@@ -240,16 +240,11 @@ for epoch_num in range(pretrainEpochs+trainEpochs):
 				if epoch_num < pretrainEpochs:
 					# During pre-training with MSE loss, validate with MSE for true maneuver class trajectory
 					net.train_flag = True
-					#fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
-					# fut => teacher_forcing eval during pretrain, just to speed up pretrain phase
-					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+					fut_pred, _ , _ = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 					l = maskedMSE(fut_pred, fut, op_mask)
 				else:
 					# During training with NLL loss, validate with NLL over multi-modal distribution
-					#fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
-					# fut => teacher_forcing eval during pretrain, just to speed up pretrain phase
-					# Full (and much slower) eval will be done on Test Set (via evaluate.py): just once
-					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid, fut)
+					fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 					l = maskedNLLTest(fut_pred, lat_pred, lon_pred, fut, op_mask,avg_along_time = True)
 					avg_val_lat_acc += (torch.sum(torch.max(lat_pred.data, 1)[1] == torch.max(lat_enc.data, 1)[1])).item() / lat_enc.size()[0]
 					avg_val_lon_acc += (torch.sum(torch.max(lon_pred.data, 1)[1] == torch.max(lon_enc.data, 1)[1])).item() / lon_enc.size()[0]
