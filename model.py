@@ -242,7 +242,7 @@ class highwayNet(nn.Module):
 				# self.enc_lstm(...) can(t be used with a batch of 0
 				logging.info("ZEROS soc_enc when no nbr")
 				#m = hist.size(1)
-				Tx = nbrs_a.size(0); m = masks.size(0)
+				Tx = nbrs.size(0); m = masks.size(0)
 				if self.use_cuda:
 					soc_enc = torch.zeros(m, self.soc_embedding_size).cuda()
 					if self.use_transformer and self.use_grid_soc:
