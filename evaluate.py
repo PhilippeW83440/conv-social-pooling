@@ -33,6 +33,7 @@ from tqdm import tqdm
 args = {}
 args['train_flag'] = False
 args['model_dir'] = 'experiments/baseline' # 'trained_models'
+args['model_dir'] = 'experiments/seq2seq' # 'trained_models'
 args['restore_file'] = None # or 'last' or 'best'
 
 utils.set_logger(os.path.join(args['model_dir'], 'evaluate.log'))
@@ -97,7 +98,7 @@ with torch.no_grad():
 			lon_enc = lon_enc.cuda()
 			fut = fut.cuda()
 			op_mask = op_mask.cuda()
-			hist_grid.cuda()
+			hist_grid = hist_grid.cuda()
 
 		if metric == 'nll':
 			# Forward pass
