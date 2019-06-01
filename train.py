@@ -46,6 +46,7 @@ args['model_dir'] = 'experiments/attention'
 args['model_dir'] = 'experiments/transformer'
 
 experiment = 'baseline'
+experiment = 'seq2seq'
 args['model_dir'] = 'experiments/' + experiment
 
 

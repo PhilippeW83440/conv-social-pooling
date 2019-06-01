@@ -38,8 +38,11 @@ class highwayNet(nn.Module):
 		self.teacher_forcing_ratio = 0.0 # TODO ultimately set it in [0.9; 1.0]
 
 		# RNN-LSTM Seq2seq architecture related
-		self.use_seq2seq = params.use_seq2seq
 		self.use_bidir = params.use_bidir
+		# NB: seq2seq uses a bidir encoder (always)
+		self.use_seq2seq = params.use_seq2seq
+		if self.use_seq2seq:
+			self.use_bidir = True
 
 		# RNN-LSTM with Attention architecture related
 		self.use_attention = params.use_attention
@@ -120,12 +123,13 @@ class highwayNet(nn.Module):
 		# self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth)
 
 		if self.use_seq2seq or self.use_attention:# Decoder seq2seq LSTM (Attention buils on top of seq2seq)
+			self.num_layers = 2
 			if self.use_maneuvers:
-				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
+				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.num_layers * self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
 			else:
-				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
+				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.num_layers * self.dyn_embedding_size, self.decoder_size)
 
-			self.dec_seq2seq = torch.nn.LSTM(self.decoder_size, self.decoder_size)
+			self.dec_seq2seq = torch.nn.LSTM(self.decoder_size, self.decoder_size, num_layers=self.num_layers)
 		elif self.use_transformer is False: # Legacy Decoder LSTM
 			if self.use_maneuvers:
 				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
@@ -172,9 +176,9 @@ class highwayNet(nn.Module):
 			if self.use_bidir: # sum bidir outputs
 				# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
 				# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
-				hist_enc = hist_enc[0, :, :] + hist_enc[1, :, :]
-				hist_enc = hist_enc.unsqueeze(0)
-			hist_enc = self.leaky_relu(self.dyn_emb(hist_enc.view(hist_enc.shape[1],hist_enc.shape[2])))
+				hist_enc = self.leaky_relu(self.dyn_emb(hist_enc))
+			else:
+				hist_enc = self.leaky_relu(self.dyn_emb(hist_enc.view(hist_enc.shape[1],hist_enc.shape[2])))
 
 			## Forward pass nbrs
 			# nbrs:				 [3sec 16, #nbrs_hist as much as we found in 128x13x3 eg 850, xy 2]
@@ -254,7 +258,11 @@ class highwayNet(nn.Module):
 
 			## Concatenate encodings:
 			# enc: [128, 112] via cat [128, 32] with [128, 80]
-			enc = torch.cat((soc_enc,hist_enc),1)
+			if self.use_bidir:
+				enc = torch.cat((soc_enc, hist_enc[0, :, :]),1)
+				self.enc_back = hist_enc[1, :, :]
+			else:
+				enc = torch.cat((soc_enc, hist_enc),1)
 
 		if self.use_transformer:
 			# Determine if we are using teacher forcing this iteration
@@ -359,13 +367,13 @@ class highwayNet(nn.Module):
 		if self.use_attention or self.use_seq2seq:
 			m = enc.size(0)
 			if self.use_cuda:
-				self.h0 = torch.zeros(1, m, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
-				self.c0 = torch.zeros(1, m, self.decoder_size).cuda()
+				self.h0 = torch.zeros(self.num_layers, m, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
 			else:
-				self.h0 = torch.zeros(1, m, self.decoder_size) # [1, 128, 128]
-				self.c0 = torch.zeros(1, m, self.decoder_size)
+				self.h0 = torch.zeros(self.num_layers, m, self.decoder_size) # [1, 128, 128]
+			self.c0 = self.y0 = self.h0
 
 		if self.use_attention: # Attention builds on top of seq2seq
+			enc = torch.cat((enc, self.enc_back), 1)
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
 			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
 			context = self.one_step_attention(self.hist_a, self.h0).unsqueeze(0)
@@ -376,10 +384,12 @@ class highwayNet(nn.Module):
 				yn, (hn, cn) = self.dec_seq2seq(context, (hn, cn))
 				h_dec = torch.cat((h_dec, yn), dim=0)
 		elif self.use_seq2seq:
+			enc = torch.cat((enc, self.enc_back), 1)
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
-			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
+			encout = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
 			#yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
-			yn, (hn, cn) = self.dec_seq2seq(yn, (yn, yn))
+			yn, (hn, cn) = self.dec_seq2seq(encout, (self.h0, self.c0))
+			#yn, (hn, cn) = self.dec_seq2seq(self.y0, (encout, encout))
 			h_dec = yn
 			for t in range(self.out_length - 1):
 				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
