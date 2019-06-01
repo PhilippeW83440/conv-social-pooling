@@ -556,3 +556,5 @@ class Batch:
 				self.src_lon = self.src_lon.cuda()
 			if self.src_lat is not None:
 				self.src_lat = self.src_lat.cuda()
+			if self.src_grid is not None:
+				self.src_grid = self.src_grid.cuda()
