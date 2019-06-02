@@ -35,7 +35,7 @@ class highwayNet(nn.Module):
 
 		# Transformer architecture related
 		self.use_transformer = params.use_transformer
-		self.teacher_forcing_ratio = 0.5 # TODO ultimately set it in [0.9; 1.0]
+		self.teacher_forcing_ratio = 0.95 # TODO ultimately set it in [0.9; 1.0]
 
 		# RNN-LSTM Seq2seq architecture related
 		self.use_bidir = params.use_bidir
@@ -415,20 +415,31 @@ class highwayNet(nn.Module):
 			fut_out = fut_out.permute(1, 0, 2)
 			fut_out = outputActivation(fut_out)
 			fut_outs = fut_out
-
 			#yn, (hn, cn) = self.dec_seq2seq(self.y0, (encout, encout))
 			h_dec = yn
-			for t in range(self.out_length - 1):
-				if self.fut is not None and random.random() < self.teacher_forcing_ratio:
-					fut_out = self.fut[t, :, :].unsqueeze(0)
-				yn, (hn, cn) = self.dec_seq2seq(fut_out[:, :, 0:2], (hn, cn))
-				h_dec = torch.cat((h_dec, yn), dim=0)
 
-				out = yn.permute(1, 0, 2)
-				fut_out = self.op(out) # XXX
-				fut_out = fut_out.permute(1, 0, 2)
-				fut_out = outputActivation(fut_out)
-				fut_outs = torch.cat((fut_outs, fut_out), dim=0)
+			if self.fut is not None and random.random() < self.teacher_forcing_ratio:
+				for t in range(self.out_length - 1):
+					if self.fut is not None and random.random() < self.teacher_forcing_ratio:
+						fut_out = self.fut[t, :, :].unsqueeze(0)
+					yn, (hn, cn) = self.dec_seq2seq(fut_out[:, :, 0:2], (hn, cn))
+					h_dec = torch.cat((h_dec, yn), dim=0)
+
+					out = yn.permute(1, 0, 2)
+					fut_out = self.op(out) # XXX
+					fut_out = fut_out.permute(1, 0, 2)
+					fut_out = outputActivation(fut_out)
+					fut_outs = torch.cat((fut_outs, fut_out), dim=0)
+			else:
+				for t in range(self.out_length - 1):
+					yn, (hn, cn) = self.dec_seq2seq(fut_out[:, :, 0:2], (hn, cn))
+					h_dec = torch.cat((h_dec, yn), dim=0)
+
+					out = yn.permute(1, 0, 2)
+					fut_out = self.op(out) # XXX
+					fut_out = fut_out.permute(1, 0, 2)
+					fut_out = outputActivation(fut_out)
+					fut_outs = torch.cat((fut_outs, fut_out), dim=0)
 			#print(fut_outs.shape)
 			return fut_outs
 
