@@ -12,6 +12,12 @@ import logging
 
 from tqdm import tqdm
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--experiment', default='baseline', help="baseline, seq2seq, attention or transformer")
+
+cmd_args = parser.parse_args()
 
 
 ## Network Arguments
@@ -32,9 +38,7 @@ from tqdm import tqdm
 
 args = {}
 args['train_flag'] = False
-args['model_dir'] = 'experiments/baseline' # 'trained_models'
-args['model_dir'] = 'experiments/seq2seq' # 'trained_models'
-args['restore_file'] = None # or 'last' or 'best'
+args['model_dir'] = 'experiments/' + cmd_args.experiment
 
 utils.set_logger(os.path.join(args['model_dir'], 'evaluate.log'))
 
@@ -47,7 +51,6 @@ params.grid_size = (params.grid_size_lon, params.grid_size_lat)
 params.use_cuda = torch.cuda.is_available()
 params.train_flag = args['train_flag']
 params.model_dir = args['model_dir']
-params.model_dir = args['restore_file']
 
 
 # Evaluation metric:
