@@ -35,7 +35,7 @@ class highwayNet(nn.Module):
 
 		# Transformer architecture related
 		self.use_transformer = params.use_transformer
-		self.teacher_forcing_ratio = 0.0 # TODO ultimately set it in [0.9; 1.0]
+		self.teacher_forcing_ratio = 0.0 # Set to 0: we overfit otherwise
 
 		# RNN-LSTM Seq2seq architecture related
 		self.use_bidir = params.use_bidir
@@ -123,12 +123,15 @@ class highwayNet(nn.Module):
 		# self.soc_fc = torch.nn.Linear(self.soc_conv_depth * self.grid_size[0] * self.grid_size[1], (((params.grid_size[0]-4)+1)//2)*self.conv_3x1_depth)
 
 		if self.use_seq2seq or self.use_attention:# Decoder seq2seq LSTM (Attention buils on top of seq2seq)
-			self.num_layers = 2
 			if self.use_maneuvers:
-				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.num_layers * self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
+				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.encoder_ndir * self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
 			else:
-				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.num_layers * self.dyn_embedding_size, self.decoder_size)
+				self.proj_seq2seq = torch.nn.Linear(self.soc_embedding_size + self.encoder_ndir * self.dyn_embedding_size, self.decoder_size)
 
+			if self.use_seq2seq:
+				self.num_layers = 2 # XXX
+			else:
+				self.num_layers = 1 # XXX
 			self.dec_seq2seq = torch.nn.LSTM(self.decoder_size, self.decoder_size, num_layers=self.num_layers)
 		elif self.use_transformer is False: # Legacy Decoder LSTM
 			if self.use_maneuvers:
@@ -174,8 +177,6 @@ class highwayNet(nn.Module):
 			self.hist_a = hist_a # [Tx 16, Batch, dir * encoder_size]
 			self.hist_enc = hist_enc  # [dir, Batch, encoder_size]
 			if self.use_bidir: # sum bidir outputs
-				# Somewhat similar to https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
-				# TODO Maybe there is something more clever to do ... cat and proj ? Check papers
 				hist_enc = self.leaky_relu(self.dyn_emb(hist_enc))
 			else:
 				hist_enc = self.leaky_relu(self.dyn_emb(hist_enc.view(hist_enc.shape[1],hist_enc.shape[2])))
@@ -186,7 +187,7 @@ class highwayNet(nn.Module):
 
 			# an, (hn, cn)	   : via nn.LSTM(in 32, hid64)
 			# we retrieve hn   : [1, 850, 64]	NB: note that an [16, 850, 64] is not used
-			# nbrs_a: [Tx 16, 850, Dir * enc_size] TODO to be used by ATTENTION
+			# nbrs_a: [Tx 16, 850, Dir * enc_size] be used by SEQ2SEQ and ATTENTION
 
 			# nbrs_enc		   : [850, 64] via reshaping
 			# the traj hist of 3 secs of (X,Y)rel coords is tranformed into 64 features
@@ -260,7 +261,7 @@ class highwayNet(nn.Module):
 			# enc: [128, 112] via cat [128, 32] with [128, 80]
 			if self.use_bidir:
 				enc = torch.cat((soc_enc, hist_enc[0, :, :]),1)
-				self.enc_back = hist_enc[1, :, :]
+				self.hist_enc_back = hist_enc[1, :, :]
 			else:
 				enc = torch.cat((soc_enc, hist_enc),1)
 
@@ -364,7 +365,25 @@ class highwayNet(nn.Module):
 
 
 	def decode(self, enc):
-		if self.use_attention or self.use_seq2seq:
+		if self.use_attention: # Attention builds on top of seq2seq
+			m = enc.size(0)
+			if self.use_cuda:
+				h0 = torch.zeros(self.num_layers, m, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
+			else:
+				h0 = torch.zeros(self.num_layers, m, self.decoder_size) # [1, 128, 128]
+			c0 = y0 = h0
+
+			enc = torch.cat((enc, self.hist_enc_back), 1)
+			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
+			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
+			context = self.one_step_attention(self.hist_a, h0).unsqueeze(0)
+			yn, (hn, cn) = self.dec_seq2seq(context, (h0, c0))
+			h_dec = yn
+			for t in range(self.out_length - 1):
+				context = self.one_step_attention(self.hist_a, hn).unsqueeze(0)
+				yn, (hn, cn) = self.dec_seq2seq(context, (hn, cn))
+				h_dec = torch.cat((h_dec, yn), dim=0)
+		elif self.use_seq2seq:
 			m = enc.size(0)
 			if self.use_cuda:
 				self.h0 = torch.zeros(self.num_layers, m, self.decoder_size).cuda() # [SeqLen, Batch, decoder size]
@@ -372,31 +391,18 @@ class highwayNet(nn.Module):
 				self.h0 = torch.zeros(self.num_layers, m, self.decoder_size) # [1, 128, 128]
 			self.c0 = self.y0 = self.h0
 
-		if self.use_attention: # Attention builds on top of seq2seq
-			enc = torch.cat((enc, self.enc_back), 1)
-			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
-			yn = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
-			context = self.one_step_attention(self.hist_a, self.h0).unsqueeze(0)
-			yn, (hn, cn) = self.dec_seq2seq(context, (self.h0, self.c0))
-			h_dec = yn
-			for t in range(self.out_length - 1):
-				context = self.one_step_attention(self.hist_a, hn).unsqueeze(0)
-				yn, (hn, cn) = self.dec_seq2seq(context, (hn, cn))
-				h_dec = torch.cat((h_dec, yn), dim=0)
-		elif self.use_seq2seq:
-			enc = torch.cat((enc, self.enc_back), 1)
+			enc = torch.cat((enc, self.hist_enc_back), 1)
 			enc = self.proj_seq2seq(enc) # proj from [Batch, 117] to [Batch, 128]
 			encout = enc.unsqueeze(0) # [1, Batch 128, decoder size 128]
-			#yn, (hn, cn) = self.dec_seq2seq(yn, (self.h0, self.c0))
 			yn, (hn, cn) = self.dec_seq2seq(encout, (self.h0, self.c0))
-			#yn, (hn, cn) = self.dec_seq2seq(self.y0, (encout, encout))
 			h_dec = yn
 			for t in range(self.out_length - 1):
 				yn, (hn, cn) = self.dec_seq2seq(yn, (hn, cn))
+				#yn, (hn, cn) = self.dec_seq2seq(encout, (hn, cn)) # almost same results
 				h_dec = torch.cat((h_dec, yn), dim=0)
 		else:
 			# enc: [batch 128, feats 117]
-			# we just repeat hn output, not using a_1 up to a_Tx (TODO via ATTENTION)
+			# we just repeat hn output, not using a_1 up to a_Tx
 			# enc: [5sec 25, batch 128, feats 117] after repeat
 			enc = enc.repeat(self.out_length, 1, 1)
 			# And now we retrieve the T_y=25 outputs and discard (hn, cn)
