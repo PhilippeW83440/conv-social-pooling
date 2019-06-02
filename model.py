@@ -91,12 +91,14 @@ class highwayNet(nn.Module):
             	                                  tgt_params=tgt_params,
             	                                  src_ngrid=src_ngrid, 
             	                                  src_lon=d_lon, src_lat=d_lat,
-            	                                  src_soc_emb_size=self.soc_embedding_size)
+            	                                  src_soc_emb_size=self.soc_embedding_size,
+						  src_grid = self.params.grid_size)
 			else:
 				self.transformer = tsf.make_model(src_feats, tgt_feats, 
             	                                  tgt_params=tgt_params,
             	                                  src_ngrid=src_ngrid, 
-            	                                  src_lon=d_lon, src_lat=d_lat)
+            	                                  src_lon=d_lon, src_lat=d_lat,
+						  src_grid = self.params.grid_size)
 			print("TRANSFORMER:", self.transformer)
 			self.batch = tsf.Batch()
 

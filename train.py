@@ -20,7 +20,7 @@ from tqdm import tqdm
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--experiment', default='baseline', help="baseline, seq2seq, attention or transformer")
+parser.add_argument('--experiment', default='baseline', help="baseline, baselineX, seq2seq, seq2seqX, attention, attentionX, transformer or transformerX")
 parser.add_argument('--restore_file', default=None, help="Optional, name of the file in experiments/experiment containing weights to reload before \
                     training") # 'best' or 'train'
 
@@ -103,8 +103,14 @@ crossEnt = torch.nn.BCELoss()
 
 ## Initialize data loaders
 logging.info("Loading the datasets...")
-trSet = ngsimDataset('data/TrainSet.mat')
-valSet = ngsimDataset('data/ValSet.mat')
+
+if 'X' in cmd_args.experiment:
+	trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(37,3) )
+	valSet = ngsimDataset('data/ValSetX.mat', grid_size=(37,3) )
+else:
+	trSet = ngsimDataset('data/TrainSet.mat')
+	valSet = ngsimDataset('data/ValSet.mat')
+
 trDataloader = DataLoader(trSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=trSet.collate_fn)
 valDataloader = DataLoader(valSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=valSet.collate_fn)
 
@@ -124,7 +130,7 @@ best_val_loss = math.inf
 
 for epoch_num in range(pretrainEpochs+trainEpochs):
 	logging.info("Epoch {}/{}".format(epoch_num + 1, pretrainEpochs+trainEpochs))
-	if epoch_num == 0:
+	if epoch_num == 0 and pretrainEpochs > 0:
 		logging.info('Pre-training with MSE loss')
 	elif epoch_num == pretrainEpochs:
 		logging.info('Training with NLL loss')
@@ -297,4 +303,4 @@ if not os.path.exists('./trained_models'):
 else:
 	print("./trained_models Directory exists! ")
 
-torch.save(net.state_dict(), './trained_models/' + experiment + '.tar')
+torch.save(net.state_dict(), './trained_models/' + cmd_args.experiment + '.tar')

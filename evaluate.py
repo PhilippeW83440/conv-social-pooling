@@ -15,7 +15,7 @@ from tqdm import tqdm
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--experiment', default='baseline', help="baseline, seq2seq, attention or transformer")
+parser.add_argument('--experiment', default='baseline', help="baseline, baselineX, seq2seq, seq2seqX, attention or transformer")
 
 cmd_args = parser.parse_args()
 
@@ -76,7 +76,11 @@ if params.use_cuda:
 net.eval()
 
 logging.info("Loading the datasets...")
-tsSet = ngsimDataset('data/TestSet.mat')
+if 'X' in cmd_args.experiment:
+	tsSet = ngsimDataset('data/TestSetX.mat')
+else:
+	tsSet = ngsimDataset('data/TestSet.mat')
+
 tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=False,num_workers=8,collate_fn=tsSet.collate_fn)
 
 if params.use_cuda:

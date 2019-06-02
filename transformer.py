@@ -45,7 +45,6 @@ class Embeddings(nn.Module):
 		# Or just 512 features for taj_emb (eg at the output)
 
 		if src_ngrid > 0: # handle 2D input features with conv net
-			assert src_grid == (13,3) # so far this is the current assumption
 			d_model_grid = d_model//2
 			d_model -= d_model_grid
 			# We start with [Batch, src_ngrid, 13, 3]
