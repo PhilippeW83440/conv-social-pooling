@@ -317,7 +317,7 @@ class VisualizationPlot(object):
 				if indx == selected_indx:
 					t = self.ax.plot(yy, xx, 'rx-') # maneuver with max prob
 				else:
-					t = self.ax.plot(yy, xx, 'y-')	# other maneuvers
+					t = self.ax.plot(yy, xx, 'y.-')	# other maneuvers
 				plotted_objects.append(t)
 		if Z is not None:
 			patch = matplotlib.patches.Rectangle((-v_l*0.5, -v_w*0.5), v_l, v_w, color="r", fill=False)
