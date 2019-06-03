@@ -286,6 +286,43 @@ def maskedMSETest(y_pred, y_gt, mask):
 	counts = torch.sum(mask[:,:,0],dim=1)
 	return lossVal, counts
 
+## Quantify and catch out Big Errors (+ or - 3 stddev)
+def maskedBIGERRTest(y_pred, y_gt, mask):
+	acc = torch.zeros_like(mask)
+	muX = y_pred[:,:, 0]
+	muY = y_pred[:,:, 1]
+	# ACHTUNG !!! what is called sigX/sigY is the inverse in the code
+	sigX = 1/y_pred[:,:, 2]
+	sigY = 1/y_pred[:,:, 3]
+	pdb.set_trace()
+
+	# sigX typically between 0 (at 0+ sec) and 2  feets (at 5 sec)
+	# sigY typically between 0 (at 0+ sec) and 15 feets (at 5 sec)
+
+	# n=1 in between 20% and 33%
+	# n=2 arround 6%
+	# n=3 arround 2%
+
+	n=3
+	minX = muX - n*sigX
+	maxX = muX + n*sigX
+	minY = muY - n*sigY
+	maxY = muY + n*sigY
+
+	x = y_gt[:,:, 0]
+	y = y_gt[:,:, 1]
+
+	errX = (x < minX) + (x > maxX)
+	errY = (y < minY) + (y > maxY)
+	out  = ((errX + errY) > 0) # [Ty, Batch] array of 0 or 1
+
+	acc[:, :, 0] = out
+	acc[:, :, 1] = out
+	acc = acc * mask
+	lossVal = torch.sum(acc[:,:,0],dim=1)
+	counts = torch.sum(mask[:,:,0],dim=1)
+	return lossVal, counts
+
 ## Helper function for log sum exp calculation:
 def logsumexp(inputs, dim=None, keepdim=False):
 	if dim is None:

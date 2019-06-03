@@ -186,7 +186,7 @@ for ii = 1:N
 				%if abs(y) <90
 
 					%gridInd = 1+round((y+90)/15);
-					gridInd = 1+round((y+90)/5); % 1 up to 37
+					gridInd = 1+round((y+90)/10); % 1 up to 19
 
 					traj{ii}(k,8+gridInd) = frameL(l,2);
 				%end
@@ -199,7 +199,7 @@ for ii = 1:N
 			%if abs(y) <90 && y~=0
 
 				% 3x26 gridInd = 14+round((y+90)/15);
-				gridInd = 38+round((y+90)/5);
+				gridInd = 20+round((y+90)/10);
 
 				traj{ii}(k,8+gridInd) = frameEgo(l,2);
 			%end
@@ -212,7 +212,7 @@ for ii = 1:N
 				%if abs(y) <90
 
 					%gridInd = 27+round((y+90)/15);
-					gridInd = 75+round((y+90)/5);
+					gridInd = 39+round((y+90)/10);
 
 					traj{ii}(k,8+gridInd) = frameR(l,2);
 				%end
@@ -312,7 +312,7 @@ disp('Saving mat files...')
 
 traj = trajTr;
 tracks = tracksTr;
-save('TrainSetX','traj','tracks');
+save('TrainSetX','traj', 'tracks');
 
 traj = trajVal;
 tracks = tracksVal;
@@ -321,14 +321,3 @@ save('ValSetX','traj','tracks');
 traj = trajTs;
 tracks = tracksTs;
 save('TestSetX','traj','tracks');
-
-
-
-
-
-
-
-
-
-
-

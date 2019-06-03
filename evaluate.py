@@ -1,7 +1,7 @@
 from __future__ import print_function
 import torch
 from model import highwayNet
-from utils import ngsimDataset,maskedNLL,maskedMSETest,maskedNLLTest
+from utils import ngsimDataset,maskedNLL,maskedMSETest,maskedNLLTest,maskedBIGERRTest
 from torch.utils.data import DataLoader
 import time
 
@@ -56,6 +56,12 @@ params.model_dir = args['model_dir']
 # Evaluation metric:
 metric = 'nll'	#or rmse
 metric = 'rmse'	#or rmse
+#metric = 'bigerr'	#or rmse
+
+if metric == 'rmse':
+	metricFCT = maskedMSETest
+else:
+	metricFCT = maskedBIGERRTest
 
 
 # Initialize network
@@ -81,7 +87,7 @@ if 'X' in cmd_args.experiment:
 else:
 	tsSet = ngsimDataset('data/TestSet.mat')
 
-tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=False,num_workers=8,collate_fn=tsSet.collate_fn)
+tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
 
 if params.use_cuda:
 	lossVals = torch.zeros(25).cuda()
@@ -120,24 +126,33 @@ with torch.no_grad():
 			if params.use_maneuvers:
 				fut_pred, lat_pred, lon_pred = net(hist, nbrs, mask, lat_enc, lon_enc, hist_grid)
 				fut_pred_max = torch.zeros_like(fut_pred[0])
-				for k in range(lat_pred.shape[0]):
+				for k in range(lat_pred.shape[0]): # k in range(batch_size)
 					lat_man = torch.argmax(lat_pred[k, :]).detach()
 					lon_man = torch.argmax(lon_pred[k, :]).detach()
 					indx = lon_man*3 + lat_man
 					fut_pred_max[:,k,:] = fut_pred[indx][:,k,:]
-				l, c = maskedMSETest(fut_pred_max, fut, op_mask)
+				l, c = metricFCT(fut_pred_max, fut, op_mask)
 			else:
 				fut_pred = net(hist, nbrs, mask, lat_enc, lon_enc)
-				l, c = maskedMSETest(fut_pred, fut, op_mask)
+				l, c = metricFCT(fut_pred, fut, op_mask)
 	
 		#logging.info("Batch {}: l {} c {}".format(i, l, c))
 		lossVals +=l.detach()
 		counts += c.detach()
 		batch_time = time.time()-st_time
+		#if metric == 'rmse':
+		#	print("...RMSE: {}".format(torch.pow(lossVals / counts,0.5)*0.3048))	 # Calculate RMSE and convert from feet to meters
+		#elif metric == 'nll':
+		#	print("...NLL: {}".format(torch.pow(lossVals / counts,0.5)*0.3048))	 # Calculate RMSE and convert from feet to meters
+		#else:
+		#	print("...BIGERR: {}".format(lossVals / counts))
 		#print("eval batch_time:", batch_time)
+		#break
 
 if metric == 'nll':
 	logging.info("NLL: {}".format(lossVals / counts))
+elif metric == 'bigerr':
+	logging.info("BIGERR: {}".format(lossVals / counts))
 else:
 	logging.info("RMSE: {}".format(torch.pow(lossVals / counts,0.5)*0.3048))	 # Calculate RMSE and convert from feet to meters
 

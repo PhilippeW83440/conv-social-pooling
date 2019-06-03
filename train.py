@@ -105,8 +105,8 @@ crossEnt = torch.nn.BCELoss()
 logging.info("Loading the datasets...")
 
 if 'X' in cmd_args.experiment:
-	trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(37,3) )
-	valSet = ngsimDataset('data/ValSetX.mat', grid_size=(37,3) )
+	trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(19,3) )
+	valSet = ngsimDataset('data/ValSetX.mat', grid_size=(19,3) )
 else:
 	trSet = ngsimDataset('data/TrainSet.mat')
 	valSet = ngsimDataset('data/ValSet.mat')
