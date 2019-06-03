@@ -57,6 +57,8 @@ net.eval()
 
 
 
+# https://scipython.com/blog/visualizing-the-bivariate-gaussian-distribution/
+
 def bivariate_normal(X, Y, sigmax=1.0, sigmay=1.0,
 					 mux=0.0, muy=0.0, sigmaxy=0.0):
 	"""
@@ -107,8 +109,8 @@ class DiscreteSlider(Slider):
 data_set = ngsimDataset('data/TestSet.mat')
 
 delta = 2.0
-x_min = -120
-x_max = 120
+x_min = 2*-120
+x_max = 2*120
 range_y = 20
 scale = 0.4
 v_w = 5
@@ -235,7 +237,7 @@ class VisualizationPlot(object):
 		#		t = self.ax.plot(nbr_fur_y, nbr_fur_x, '|-')	# neighbor future
 		#		plotted_objects.append(t)
 
-		if local_nbrs.nelement() >= 0: # XXX
+		if local_nbrs.nelement() > 0:
 			for j in range(local_nbrs.shape[1]):
 				nbr_x = local_nbrs[:,j,0].cpu().numpy()
 				nbr_y = local_nbrs[:,j,1].cpu().numpy()
@@ -252,13 +254,14 @@ class VisualizationPlot(object):
 
 		fur_x = fut[:,k,0].cpu().numpy()
 		fur_y = fut[:,k,1].cpu().numpy()
-		t = self.ax.plot(fur_y, fur_x, 'w|-')
+		t = self.ax.plot(fur_y, fur_x, 'g|-')
 		plotted_objects.append(t)
 
 		lat_man = torch.argmax(lat_pred[k, :]).detach()
 		lon_man = torch.argmax(lon_pred[k, :]).detach()
 		selected_indx = lon_man*3 + lat_man
 		man_count = 0
+		man_Zs = []
 		for j in range(lat_pred.shape[1]):	# lat
 			for jj in range(lon_pred.shape[1]): # lon
 				lat_man = j
@@ -268,7 +271,6 @@ class VisualizationPlot(object):
 				prob = lat_pred[k, lat_man].detach() * lon_pred[k, lon_man].detach()
 				# XXX if prob < 0.2:
 				# XXX 	continue
-				man_count += 1
 
 				#lon_man = lon_man.cpu().numpy()
 				#lat_man = lat_man.cpu().numpy()
@@ -284,6 +286,7 @@ class VisualizationPlot(object):
 				xx = []
 				yy = []
 
+				Zs = []
 				for i in range(fut_pred_.shape[0]): # time
 					#print(fut_pred_.shape)
 					muX = fut_pred_[i,0]
@@ -305,6 +308,8 @@ class VisualizationPlot(object):
 					Z1 /= factor
 					Z1 *= prob.cpu().numpy() # XXX
 
+					Zs.append(Z1)
+
 					#Z1 = np.log(Z1+1)
 					#print("range:", np.min(Z1), np.max(Z1))
 					if Z is None:
@@ -313,17 +318,23 @@ class VisualizationPlot(object):
 						Z = Z + Z1
 					#if i >= 5:
 					#	 break
+				man_Zs.append(Zs)
 
 				if indx == selected_indx:
+					man_selected = man_count
 					t = self.ax.plot(yy, xx, 'rx-') # maneuver with max prob
 				else:
 					t = self.ax.plot(yy, xx, 'y.-')	# other maneuvers
 				plotted_objects.append(t)
+				man_count += 1
 		if Z is not None:
 			patch = matplotlib.patches.Rectangle((-v_l*0.5, -v_w*0.5), v_l, v_w, color="r", fill=False)
 			self.ax.add_patch(patch) # main vehicle
 			plotted_objects.append(patch)
-			m = self.ax.imshow(Z, interpolation='bilinear', origin='lower', cmap=cm.inferno, extent=(x_min, x_max, -range_y, range_y))
+			#m = self.ax.imshow(Z, interpolation='bilinear', origin='lower', cmap=cm.inferno, extent=(x_min, x_max, -range_y, range_y))
+			# XXX 10 => we visualize pdf for selected maneuver at 3 seconds
+			m = self.ax.imshow(man_Zs[man_selected][15], interpolation='bilinear', origin='lower', cmap=cm.inferno, extent=(x_min, x_max, -range_y, range_y))
+			#m = self.ax.imshow(Z, interpolation='bilinear', origin='lower', cmap=cm.viridis, extent=(x_min, x_max, -range_y, range_y))
 			plotted_objects.append(m)
 		self.plotted_objects = plotted_objects
 
