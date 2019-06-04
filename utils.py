@@ -84,12 +84,9 @@ class ngsimDataset(Dataset):
 			else:
 				stpt = np.maximum(0, np.argwhere(vehTrack[:, 0] == t).item() - self.t_h)
 				enpt = np.argwhere(vehTrack[:, 0] == t).item() + 1
-				#pdb.set_trace()
-
 				# ACHTUNG copy is mandatory !
 				hist = copy.copy(vehTrack[stpt:enpt:self.d_s,1:3 + self.newFeats]) # 0:Time, 1:X, 2:Y, 3:V or A
 				hist[:,0:2] = hist[:,0:2] - refPos
-
 				#hist = vehTrack[stpt:enpt:self.d_s,1:3]-refPos
 
 			if len(hist) < self.t_h//self.d_s + 1:
@@ -118,7 +115,7 @@ class ngsimDataset(Dataset):
 			nbr_batch_size += sum([len(nbrs[i])!=0 for i in range(len(nbrs))])
 
 		maxlen = self.t_h//self.d_s + 1
-		nbrs_batch = torch.zeros(maxlen,nbr_batch_size,2)
+		nbrs_batch = torch.zeros(maxlen,nbr_batch_size,2 + self.newFeats)
 
 		# Initialize social mask batch:
 		pos = [0, 0]
@@ -127,7 +124,7 @@ class ngsimDataset(Dataset):
 
 
 		# Initialize history, history lengths, future, output mask, lateral maneuver and longitudinal maneuver batches:
-		hist_batch = torch.zeros(maxlen,len(samples),2)
+		hist_batch = torch.zeros(maxlen,len(samples),2 + self.newFeats)
 		fut_batch = torch.zeros(self.t_f//self.d_s,len(samples),2)
 		op_mask_batch = torch.zeros(self.t_f//self.d_s,len(samples),2)
 		lat_enc_batch = torch.zeros(len(samples),3)
@@ -139,11 +136,15 @@ class ngsimDataset(Dataset):
 		for sampleId,(hist, fut, nbrs, lat_enc, lon_enc, hist_grid) in enumerate(samples):
 
 			# Set up history, future, lateral maneuver and longitudinal maneuver batches:
-			hist_batch[0:len(hist),sampleId,0] = torch.from_numpy(hist[:, 0])
-			hist_batch[0:len(hist), sampleId, 1] = torch.from_numpy(hist[:, 1])
+			#hist_batch[0:len(hist),sampleId,0] = torch.from_numpy(hist[:, 0])
+			#hist_batch[0:len(hist), sampleId, 1] = torch.from_numpy(hist[:, 1])
+			for feat in range(2 + self.newFeats):
+				hist_batch[0:len(hist),sampleId, feat] = torch.from_numpy(hist[:, feat])
+
 			fut_batch[0:len(fut), sampleId, 0] = torch.from_numpy(fut[:, 0])
 			fut_batch[0:len(fut), sampleId, 1] = torch.from_numpy(fut[:, 1])
 			op_mask_batch[0:len(fut),sampleId,:] = 1
+
 			lat_enc_batch[sampleId,:] = torch.from_numpy(lat_enc)
 			lon_enc_batch[sampleId, :] = torch.from_numpy(lon_enc)
 
@@ -152,8 +153,11 @@ class ngsimDataset(Dataset):
 			# Set up neighbor, neighbor sequence length, and mask batches:
 			for id,nbr in enumerate(nbrs):
 				if len(nbr)!=0:
-					nbrs_batch[0:len(nbr),count,0] = torch.from_numpy(nbr[:, 0])
-					nbrs_batch[0:len(nbr), count, 1] = torch.from_numpy(nbr[:, 1])
+					#nbrs_batch[0:len(nbr),count,0] = torch.from_numpy(nbr[:, 0])
+					#nbrs_batch[0:len(nbr), count, 1] = torch.from_numpy(nbr[:, 1])
+					for feat in range(2 + self.newFeats):
+						nbrs_batch[0:len(nbr),count, feat] = torch.from_numpy(nbr[:, feat])
+
 					pos[0] = id % self.grid_size[0]
 					pos[1] = id // self.grid_size[0]
 					mask_batch[sampleId,pos[1],pos[0],:] = torch.ones(self.enc_size).byte()
