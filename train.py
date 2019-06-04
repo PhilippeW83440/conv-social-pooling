@@ -71,7 +71,12 @@ print("\nEXPERIMENT:", args['model_dir'], "\n")
 
 
 # Initialize network
-batch_size = 128
+if "transformer" in cmd_args.experiment:
+	# As big as you can with transformer
+	# cf Training Tips for the Transformer Model
+	batch_size = 1024 # 1024 on AWS with V100, 768 on GTX 1080 TI
+else:
+	batch_size = 128
 # just when using pdb.set_trace() to discriminate batch_size more easily in tensor shape dumps
 #batch_size = 127
 net = highwayNet(params)
@@ -90,7 +95,7 @@ net.train()
 
 ## Initialize optimizer
 pretrainEpochs = 0
-trainEpochs = 1
+trainEpochs = 2
 
 #if params.use_transformer:
 #	# Out of Hyper-params search experiments
