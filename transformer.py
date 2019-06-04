@@ -330,7 +330,7 @@ class EncoderDecoder(nn.Module):
 	def infer(self, model, src, src_mask, Ty, src_grid=None, src_lon=None, src_lat=None):
 		m, Tx, nx = src.shape
 		memory = model.encode(src, src_mask, src_grid, src_lon, src_lat) # [Batch 128, Tx 16, d_model 512]
-		ys = src[:, -1, :].unsqueeze(1) # [Batch 128, ys.size(1) 1, X/Y 2]
+		ys = src[:, -1, 0:2].unsqueeze(1) # [Batch 128, ys.size(1) 1, X/Y 2]
 	
 		for i in range(Ty):
 			ys_mask = np.ones( (ys.size(1), ys.size(1)), dtype='uint8')
