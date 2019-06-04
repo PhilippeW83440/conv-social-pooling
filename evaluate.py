@@ -65,9 +65,20 @@ else:
 
 
 # Initialize network
-batch_size=128
 batch_size=1024
-net = highwayNet(params)
+
+logging.info("Loading the datasets...")
+newFeats = 0
+if 'X' in cmd_args.experiment:
+	newFeats = 1
+	tsSet = ngsimDataset('data/TestSetV.mat', newFeats=newFeats)
+else:
+	tsSet = ngsimDataset('data/TestSet.mat')
+
+tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
+
+
+net = highwayNet(params, newFeats=newFeats)
 
 net_path = os.path.join(args['model_dir'], 'best.pth.tar')
 assert os.path.isfile(net_path), "No net file found at {}".format(net_path)
@@ -81,13 +92,6 @@ if params.use_cuda:
 # No dropout, batch norm so far; but it is a good default practice anyways
 net.eval()
 
-logging.info("Loading the datasets...")
-if 'X' in cmd_args.experiment:
-	tsSet = ngsimDataset('data/TestSetX.mat')
-else:
-	tsSet = ngsimDataset('data/TestSet.mat')
-
-tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
 
 if params.use_cuda:
 	lossVals = torch.zeros(25).cuda()

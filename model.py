@@ -15,8 +15,10 @@ import logging
 class highwayNet(nn.Module):
 
 	## Initialization
-	def __init__(self,params):
+	def __init__(self,params, newFeats=0):
 		super(highwayNet, self).__init__()
+
+		self.newFeats = newFeats
 
 		## Unpack arguments
 		self.params = params
@@ -71,7 +73,8 @@ class highwayNet(nn.Module):
 		## Define network weights
 		# TRANSFORMER
 		if self.use_transformer:
-			src_feats = tgt_feats = 2 # (X,Y) point
+			src_feats = 2 + self.newFeats # (X,Y) point or (X,Y,A/V)
+			tgt_feats = 2 # (X,Y) point
 			tgt_params = 5 # 5 params for bivariate Gaussian distrib
 
 			if self.use_grid or self.use_grid_soc:
@@ -103,7 +106,7 @@ class highwayNet(nn.Module):
 			self.batch = tsf.Batch()
 
 		# Input embedding layer
-		self.ip_emb = torch.nn.Linear(2,self.input_embedding_size)
+		self.ip_emb = torch.nn.Linear(2 + self.newFeats,self.input_embedding_size)
 
 		# Encoder LSTM
 		if self.use_bidir:

@@ -70,16 +70,34 @@ params.model_dir = args['model_dir']
 print("\nEXPERIMENT:", args['model_dir'], "\n")
 
 
-# Initialize network
 if "transformer" in cmd_args.experiment:
 	# As big as you can with transformer
 	# cf Training Tips for the Transformer Model
 	batch_size = 1024 # 1024 on AWS with V100, 768 on GTX 1080 TI
 else:
 	batch_size = 128
-# just when using pdb.set_trace() to discriminate batch_size more easily in tensor shape dumps
-#batch_size = 127
-net = highwayNet(params)
+
+## Initialize data loaders
+logging.info("Loading the datasets...")
+
+newFeats = 0
+if 'X' in cmd_args.experiment: # new features experiments
+	newFeats = 1
+	#trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(19,3) )
+	#valSet = ngsimDataset('data/ValSetX.mat', grid_size=(19,3) )
+	trSet = ngsimDataset('data/TrainSetV.mat', newFeats=newFeats)
+	valSet = ngsimDataset('data/ValSetV.mat', newFeats=newFeats)
+else:
+	trSet = ngsimDataset('data/TrainSet.mat')
+	valSet = ngsimDataset('data/ValSet.mat')
+
+trDataloader = DataLoader(trSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=trSet.collate_fn)
+valDataloader = DataLoader(valSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=valSet.collate_fn)
+
+
+
+# Initialize network
+net = highwayNet(params, newFeats=newFeats)
 print(net)
 if params.use_cuda:
 	net = net.cuda()
@@ -106,18 +124,6 @@ optimizer = torch.optim.Adam(net.parameters())
 crossEnt = torch.nn.BCELoss()
 
 
-## Initialize data loaders
-logging.info("Loading the datasets...")
-
-if 'X' in cmd_args.experiment:
-	trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(19,3) )
-	valSet = ngsimDataset('data/ValSetX.mat', grid_size=(19,3) )
-else:
-	trSet = ngsimDataset('data/TrainSet.mat')
-	valSet = ngsimDataset('data/ValSet.mat')
-
-trDataloader = DataLoader(trSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=trSet.collate_fn)
-valDataloader = DataLoader(valSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=valSet.collate_fn)
 
 
 # reload weights from restore_file if specified

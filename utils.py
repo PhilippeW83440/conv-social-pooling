@@ -5,13 +5,16 @@ import numpy as np
 import torch
 import pdb
 
+import copy
+
 #___________________________________________________________________________________________________________________________
 
 ### Dataset class for the NGSIM dataset
 class ngsimDataset(Dataset):
 
 
-	def __init__(self, mat_file, t_h=30, t_f=50, d_s=2, enc_size = 64, grid_size = (13,3)):
+	def __init__(self, mat_file, t_h=30, t_f=50, d_s=2, enc_size = 64, grid_size = (13,3), newFeats=0):
+		self.newFeats = newFeats
 		self.D = scp.loadmat(mat_file)['traj']
 		self.T = scp.loadmat(mat_file)['tracks']
 		self.t_h = t_h	# length of track history
@@ -32,7 +35,7 @@ class ngsimDataset(Dataset):
 		dsId = self.D[idx, 0].astype(int)
 		vehId = self.D[idx, 1].astype(int)
 		t = self.D[idx, 2]
-		grid = self.D[idx,8:]
+		grid = self.D[idx, self.newFeats + 8:]
 		neighbors = []
 
 		# Get track history 'hist' = ndarray, and future track 'fut' = ndarray
@@ -42,7 +45,7 @@ class ngsimDataset(Dataset):
 		hist_grid = np.zeros((self.Tx, self.grid_size[0], self.grid_size[1]))
 		i = idx; count = 1
 		while i >= 0 and i > idx - self.Tx:
-			past_grid = self.D[i, 8:] # First one is actually current grid
+			past_grid = self.D[i, self.newFeats + 8:] # First one is actually current grid
 			past_grid = np.reshape(past_grid, (self.grid_size[1], self.grid_size[0])).transpose()
 			past_grid = (past_grid > 0).astype(int) # just an occupancy grid
 			hist_grid[-count, :] = past_grid
@@ -57,9 +60,9 @@ class ngsimDataset(Dataset):
 
 		# Maneuvers 'lon_enc' = one-hot vector, 'lat_enc = one-hot vector
 		lon_enc = np.zeros([2])
-		lon_enc[int(self.D[idx, 7] - 1)] = 1
+		lon_enc[int(self.D[idx, self.newFeats + 7] - 1)] = 1
 		lat_enc = np.zeros([3])
-		lat_enc[int(self.D[idx, 6] - 1)] = 1
+		lat_enc[int(self.D[idx, self.newFeats + 6] - 1)] = 1
 
 		return hist,fut,neighbors,lat_enc,lon_enc,hist_grid
 
@@ -68,23 +71,29 @@ class ngsimDataset(Dataset):
 	## Helper function to get track history
 	def getHistory(self,vehId,t,refVehId,dsId):
 		if vehId == 0:
-			return np.empty([0,2])
+			return np.empty([0,2 + self.newFeats ])
 		else:
 			if self.T.shape[1]<=vehId-1:
-				return np.empty([0,2])
+				return np.empty([0,2 + self.newFeats])
 			refTrack = self.T[dsId-1][refVehId-1].transpose()
 			vehTrack = self.T[dsId-1][vehId-1].transpose()
 			refPos = refTrack[np.where(refTrack[:,0]==t)][0,1:3]
 
 			if vehTrack.size==0 or np.argwhere(vehTrack[:, 0] == t).size==0:
-				 return np.empty([0,2])
+				return np.empty([0,2 + self.newFeats])
 			else:
 				stpt = np.maximum(0, np.argwhere(vehTrack[:, 0] == t).item() - self.t_h)
 				enpt = np.argwhere(vehTrack[:, 0] == t).item() + 1
-				hist = vehTrack[stpt:enpt:self.d_s,1:3]-refPos
+				#pdb.set_trace()
+
+				# ACHTUNG copy is mandatory !
+				hist = copy.copy(vehTrack[stpt:enpt:self.d_s,1:3 + self.newFeats]) # 0:Time, 1:X, 2:Y, 3:V or A
+				hist[:,0:2] = hist[:,0:2] - refPos
+
+				#hist = vehTrack[stpt:enpt:self.d_s,1:3]-refPos
 
 			if len(hist) < self.t_h//self.d_s + 1:
-				return np.empty([0,2])
+				return np.empty([0,2 + self.newFeats])
 			return hist
 
 
@@ -294,7 +303,6 @@ def maskedBIGERRTest(y_pred, y_gt, mask):
 	# ACHTUNG !!! what is called sigX/sigY is the inverse in the code
 	sigX = 1/y_pred[:,:, 2]
 	sigY = 1/y_pred[:,:, 3]
-	pdb.set_trace()
 
 	# sigX typically between 0 (at 0+ sec) and 2  feets (at 5 sec)
 	# sigY typically between 0 (at 0+ sec) and 15 feets (at 5 sec)
