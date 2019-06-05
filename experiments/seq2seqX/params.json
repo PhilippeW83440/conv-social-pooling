@@ -7,7 +7,7 @@
 	"in_length": 16,
 	"out_length": 25,
 
-	"grid_size_lon": 19,
+	"grid_size_lon": 13,
 	"grid_size_lat": 3,
 
 	"soc_conv_depth": 64,
