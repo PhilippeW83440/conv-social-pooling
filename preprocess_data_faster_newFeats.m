@@ -36,7 +36,7 @@ i80_3 = 'raw/i80-1715-1730.txt';
 % We insert an additional feature Speed or Accel
 % This feature will be part of the track (X,Y,V and/or A) instead of (X,Y)
 % NB: Accel could be thought or used as an ersatz of Driver Behavioral Feature as well
-newFeats = 1
+newFeats = 2
 
 %% Fields: 
 
@@ -77,7 +77,11 @@ traj{6} = single([6*ones(size(traj{6},1),1),traj{6}]);
 
 for k = 1:N
 	%traj{k} = traj{k}(:,[1,2,3,6,7,15]);
-	traj{k} = traj{k}(:,[1,2,3,6,7,13,15]); % retrieve speed
+	%traj{k} = traj{k}(:,[1,2,3,6,7,13,15]); % retrieve speed
+	%traj{k} = traj{k}(:,[1,2,3,6,7,14,15]); % retrieve accel
+	% For Traj paths: we use (X,Y,V)
+	% For Behav path: we use Accel as a proxy of Driver Behavior Features
+	traj{k} = traj{k}(:,[1,2,3,6,7,13,14,15]); % retrieve speed & accel
 	if k <=3
 		traj{k}(traj{k}(:,newFeats + 6)>=6,newFeats + 6) = 6;
 	end
@@ -312,23 +316,12 @@ disp('Saving mat files...')
 
 traj = trajTr;
 tracks = tracksTr;
-save('TrainSetV','traj','tracks');
+save('TrainSetVA','traj','tracks');
 
 traj = trajVal;
 tracks = tracksVal;
-save('ValSetV','traj','tracks');
+save('ValSetVA','traj','tracks');
 
 traj = trajTs;
 tracks = tracksTs;
-save('TestSetV','traj','tracks');
-
-
-
-
-
-
-
-
-
-
-
+save('TestSetVA','traj','tracks');

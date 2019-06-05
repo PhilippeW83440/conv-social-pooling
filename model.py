@@ -15,10 +15,11 @@ import logging
 class highwayNet(nn.Module):
 
 	## Initialization
-	def __init__(self,params, newFeats=0):
+	def __init__(self,params, newFeats=0, behavFeats=0):
 		super(highwayNet, self).__init__()
 
 		self.newFeats = newFeats
+		self.behavFeats = behavFeats
 
 		## Unpack arguments
 		self.params = params
@@ -106,7 +107,17 @@ class highwayNet(nn.Module):
 			self.batch = tsf.Batch()
 
 		# Input embedding layer
-		self.ip_emb = torch.nn.Linear(2 + self.newFeats,self.input_embedding_size)
+		self.ip_emb = torch.nn.Linear(2 + self.newFeats - self.behavFeats, self.input_embedding_size)
+		
+		# Beahavioral Path pipeline: a specific LSTM encoder + 2xConv/pool to process behavioral features
+		if self.behavFeats > 0:
+			self.use_bidir = False # just to make code more simple
+			# Similar pipeline than SOC but with specific weights for BEHAV features path
+			self.ip_behav_emb = torch.nn.Linear(self.behavFeats, self.input_embedding_size)
+			self.enc_behav_lstm = torch.nn.LSTM(self.input_embedding_size, self.encoder_size, 1)
+			self.behav_conv = torch.nn.Conv2d(self.encoder_size,self.soc_conv_depth,3)
+			self.behav_conv_3x1 = torch.nn.Conv2d(self.soc_conv_depth, self.conv_3x1_depth, (3,1))
+			self.behav_maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0))
 
 		# Encoder LSTM
 		if self.use_bidir:
@@ -121,7 +132,7 @@ class highwayNet(nn.Module):
 
 		# Convolutional social pooling layer and social embedding layer
 		self.soc_conv = torch.nn.Conv2d(self.encoder_size,self.soc_conv_depth,3)
-		self.conv_3x1 = torch.nn.Conv2d(self.soc_conv_depth, self.conv_3x1_depth, (3,1))
+		self.soc_conv_3x1 = torch.nn.Conv2d(self.soc_conv_depth, self.conv_3x1_depth, (3,1))
 		self.soc_maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0))
 
 		# FC social pooling layer (for comparison):
@@ -139,7 +150,10 @@ class highwayNet(nn.Module):
 				self.num_layers = 1 # XXX
 			self.dec_seq2seq = torch.nn.LSTM(self.decoder_size, self.decoder_size, num_layers=self.num_layers)
 		elif self.use_transformer is False: # Legacy Decoder LSTM
-			if self.use_maneuvers:
+			if self.behavFeats > 0:
+				# behav_embedding_size = soc_embedding_size
+				self.dec_lstm = torch.nn.LSTM(2 * self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
+			elif self.use_maneuvers:
 				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size + self.num_lat_classes + self.num_lon_classes, self.decoder_size)
 			else:
 				self.dec_lstm = torch.nn.LSTM(self.soc_embedding_size + self.dyn_embedding_size, self.decoder_size)
@@ -178,6 +192,33 @@ class highwayNet(nn.Module):
 
 			# hist_enc		   : [ 128, 64] via reshaping (cf hist_enc.view(...))
 			# hist_enc		   : [ 128, 32] via nn.Linear(hid 64, dyn_emb_size 32)
+
+			behav_enc = None
+			if self.behavFeats > 0 and self.use_bidir is False:
+				###--- Split features: Dyn vs Behav
+				hist = hist[:, :, :-self.behavFeats] # (X,Y,V) features
+				nbrs = nbrs[:, :, :-self.behavFeats] # (X,Y,V) features
+				ego_behav = copy.copy(hist[:, :, -self.behavFeats:]) # (A) features
+				nbrs_behav = copy.copy(nbrs[:, :, -self.behavFeats:]) # (A) features
+
+				### --- Behav Features Path ---
+				ego_behav_a, (ego_behav_enc,_) = self.enc_behav_lstm(self.leaky_relu(self.ip_behav_emb(ego_behav)))
+				ego_behav_enc = ego_behav_enc.squeeze() # [Batch 128, Feats 64]
+
+				nbrs_behav_a, (nbrs_behav_enc,_) = self.enc_behav_lstm(self.leaky_relu(self.ip_behav_emb(nbrs_behav)))
+				nbrs_behav_enc = nbrs_behav_enc.squeeze() # [eg 850, Feats 64]
+
+				## Masked scatter
+				behav_enc = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
+				behav_enc = behav_enc.masked_scatter_(masks, nbrs_behav_enc) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
+				behav_enc = behav_enc.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
+
+				behav_enc[:, :, 6, 1] = ego_behav_enc
+
+				## Apply convolutional pooling on behavioral features:
+				behav_enc = self.behav_maxpool(self.leaky_relu(self.behav_conv_3x1(self.leaky_relu(self.behav_conv(behav_enc)))))
+				behav_enc = behav_enc.view(-1,self.soc_embedding_size)
+
 			hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
 			self.hist_a = hist_a # [Tx 16, Batch, dir * encoder_size]
 			self.hist_enc = hist_enc  # [dir, Batch, encoder_size]
@@ -217,12 +258,12 @@ class highwayNet(nn.Module):
 				# soc_enc: [batch 128, hid 64, grid_lon 13, grid lat 3]
 				# NB: VALID with PyTorch (not SAME default like with TF)
 				# self.soc_conv(soc_enc):  [128, 64, 11, 1] via Conv2d(in 64, out 64, f 3)
-				# self.conv_3x1(...):	   [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
+				# self.soc_conv_3x1(...):	   [128, 16,  9, 1] via Conv2d(in 64, out 16, f 3)
 				# self.soc_maxpool(...):   [128, 16,  5, 1] via MaxPool2d(2, 1)
 				# soc_enc: [128, 80] via reshaping NB: self.soc_embedding_size = 80
 
 				## Apply convolutional social pooling:
-				soc_enc = self.soc_maxpool(self.leaky_relu(self.conv_3x1(self.leaky_relu(self.soc_conv(soc_enc)))))
+				soc_enc = self.soc_maxpool(self.leaky_relu(self.soc_conv_3x1(self.leaky_relu(self.soc_conv(soc_enc)))))
 				soc_enc = soc_enc.view(-1,self.soc_embedding_size)
 
 				## Apply fc soc pooling
@@ -243,7 +284,7 @@ class highwayNet(nn.Module):
 						soc_enct = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
 						soc_enct = soc_enct.masked_scatter_(masks, nbrs_enct) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
 						soc_enct = soc_enct.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
-						soc_enct = self.soc_maxpool(self.leaky_relu(self.conv_3x1(self.leaky_relu(self.soc_conv(soc_enct)))))
+						soc_enct = self.soc_maxpool(self.leaky_relu(self.soc_conv_3x1(self.leaky_relu(self.soc_conv(soc_enct)))))
 						soc_enct = soc_enct.view(-1,self.soc_embedding_size)
 						soc_encs[:, t, :] = soc_enct
 
@@ -350,7 +391,7 @@ class highwayNet(nn.Module):
 					# enc: [128, 117] via cat [128, 112],[128,3],[128,2]
 					# 117 features: 32 dync, 80 soc, 5 maneuver
 					enc = torch.cat((enc, lat_enc, lon_enc), 1)
-					fut_pred = self.decode(enc) # enc: [batch 128, feats 117]
+					fut_pred = self.decode(enc, behav_enc) # enc: [batch 128, feats 117]
 					return fut_pred, lat_pred, lon_pred
 				else:
 					fut_pred = []
@@ -362,14 +403,16 @@ class highwayNet(nn.Module):
 							lat_enc_tmp[:, l] = 1
 							lon_enc_tmp[:, k] = 1
 							enc_tmp = torch.cat((enc, lat_enc_tmp, lon_enc_tmp), 1)
-							fut_pred.append(self.decode(enc_tmp))
+							fut_pred.append(self.decode(enc_tmp, behav_enc))
 					return fut_pred, lat_pred, lon_pred
 			else:
-				fut_pred = self.decode(enc)
+				fut_pred = self.decode(enc, behav_enc)
 				return fut_pred
 
 
-	def decode(self, enc):
+	def decode(self, enc, behav_enc=None):
+
+
 		if self.use_attention: # Attention builds on top of seq2seq
 			m = enc.size(0)
 			if self.use_cuda:
@@ -406,6 +449,9 @@ class highwayNet(nn.Module):
 				#yn, (hn, cn) = self.dec_seq2seq(encout, (hn, cn)) # almost same results
 				h_dec = torch.cat((h_dec, yn), dim=0)
 		else:
+			if behav_enc is not None:
+				enc = torch.cat((enc, behav_enc), 1)
+
 			# enc: [batch 128, feats 117]
 			# we just repeat hn output, not using a_1 up to a_Tx
 			# enc: [5sec 25, batch 128, feats 117] after repeat
