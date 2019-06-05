@@ -81,12 +81,15 @@ else:
 logging.info("Loading the datasets...")
 
 newFeats = 0
+behavFeats = 0
 if 'X' in cmd_args.experiment: # new features experiments
-	newFeats = 1
+	newFeats = 2
+	behavFeats = 1
 	#trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(19,3) )
 	#valSet = ngsimDataset('data/ValSetX.mat', grid_size=(19,3) )
-	trSet = ngsimDataset('data/TrainSetV.mat', newFeats=newFeats)
-	valSet = ngsimDataset('data/ValSetV.mat', newFeats=newFeats)
+
+	trSet = ngsimDataset('data/TrainSetVA.mat', newFeats=newFeats)
+	valSet = ngsimDataset('data/ValSetVA.mat', newFeats=newFeats)
 else:
 	trSet = ngsimDataset('data/TrainSet.mat')
 	valSet = ngsimDataset('data/ValSet.mat')
@@ -97,7 +100,7 @@ valDataloader = DataLoader(valSet,batch_size=batch_size,shuffle=True,num_workers
 
 
 # Initialize network
-net = highwayNet(params, newFeats=newFeats)
+net = highwayNet(params, newFeats=newFeats, behavFeats=behavFeats)
 print(net)
 if params.use_cuda:
 	net = net.cuda()
