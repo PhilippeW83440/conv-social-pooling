@@ -8,12 +8,6 @@
 * https://www.youtube.com/watch?v=OYygPG4d9H0 from Ivan Bilan (PyData Berlin 2018) 
 * https://www.youtube.com/watch?v=S0KakHcj_rs walkthrough above blog post
 
-## Tricky parts:
-* Positional Encoding: to be detailed   
-  Maybe it is better to learn a positional embedding as done here https://arxiv.org/pdf/1705.03122.pdf  
-  In our case we have fixed input lengths anyways, so we can rely on learning    
-* Crazy learning rate formula p.7 in the paper: increasing lr linearly during warmup and then decreasing it
-
 
 ## Pytorch implementations:  
 * https://github.com/keitakurita/Practical_NLP_in_PyTorch/blob/master/deep_dives/transformer_from_scratch.ipynb  
