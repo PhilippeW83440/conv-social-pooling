@@ -55,7 +55,7 @@ params.model_dir = args['model_dir']
 
 # Evaluation metric:
 metric = 'nll'	#or rmse
-metric = 'rmse'	#or rmse
+#metric = 'rmse'	#or rmse
 #metric = 'bigerr'	#or rmse
 
 if metric == 'rmse':
@@ -71,8 +71,8 @@ logging.info("Loading the datasets...")
 newFeats = 0
 behavFeats = 0
 if 'X' in cmd_args.experiment:
-	newFeats = 1
-	behavFeats = 1
+	newFeats = 2
+	behavFeats = 0
 	#tsSet = ngsimDataset('data/TestSetV.mat', newFeats=newFeats)
 	tsSet = ngsimDataset('data/TestSetVA.mat', newFeats=newFeats)
 else:
