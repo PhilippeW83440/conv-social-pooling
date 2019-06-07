@@ -30,8 +30,6 @@ From googledrive:
 * Download i-80: https://drive.google.com/open?id=19ovxiJLCnS1ar1dYvUIrfdz_UnGejK-k  
 * Download us-101: https://drive.google.com/open?id=14dMKew22_5evfOoSGEBYqHP3L92e7nyJ  
   
-Dataset fields:  
-* doc/trajectory-data-dictionary.htm  
 
 ### Reference .mat files
 Obtained with preprocess_data.m (legacy) or preprocess_data_faster.m (much faster) applied to above NGSIM dataset    
@@ -41,15 +39,26 @@ https://drive.google.com/open?id=1xxAmnsn_sROUjvJiNWetCQ7odLNFA_Zt
 
 ### Training  
 
-```bash
-python train.py
-```
 Using a GPU is highly recommended due to the huge speedup.
+```bash
+python train.py --experiment baseline
+```
+Or to continue training  
+```bash
+python train.py --experiment baseline --restore_file best
+```
+
+To train enhanced version of Transformer:
+```bash
+python train.py --experiment transformerX
+```
+By default the batch_size is set to 1024, and will use close to 16GB of GPU memory. 
+You may have to adapt the batch size in params.json for your setup. Generally for Transformer try to use a batch size as big as you can (cf https://arxiv.org/abs/1804.00247), while with RNN-LSTM we usually stick to 128.
 
 ### Evaluating 
 
 ```bash
-python evaluate.py
+python evaluate.py --experiment baseline
 ```
 
 ### Experiments results
