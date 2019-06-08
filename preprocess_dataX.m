@@ -33,10 +33,6 @@ i80_3 = 'raw/i80-1715-1730.txt';
 %us101_1 = 'raw/us-101/medium1.txt';
 %us101_2 = 'raw/us-101/medium2.txt';
 
-% We insert an additional feature Speed or Accel
-% This feature will be part of the track (X,Y,V and/or A) instead of (X,Y)
-% NB: Accel could be thought or used as an ersatz of Driver Behavioral Feature as well
-newFeats = 2
 
 %% Fields: 
 
@@ -75,13 +71,23 @@ traj{5} = single([5*ones(size(traj{5},1),1),traj{5}]);
 traj{6} = load(i80_3);
 traj{6} = single([6*ones(size(traj{6},1),1),traj{6}]);
 
+% We insert an additional feature Speed or Accel
+% This feature will be part of the track (X,Y,V and/or A) instead of (X,Y)
+% NB: Accel could be thought or used as an ersatz of Driver Behavioral Feature as well
+newFeats = 3
+
 for k = 1:N
 	%traj{k} = traj{k}(:,[1,2,3,6,7,15]);
 	%traj{k} = traj{k}(:,[1,2,3,6,7,13,15]); % retrieve speed
 	%traj{k} = traj{k}(:,[1,2,3,6,7,14,15]); % retrieve accel
 	% For Traj paths: we use (X,Y,V)
 	% For Behav path: we use Accel as a proxy of Driver Behavior Features
-	traj{k} = traj{k}(:,[1,2,3,6,7,13,14,15]); % retrieve speed & accel
+	%traj{k} = traj{k}(:,[1,2,3,6,7,13,14,15]); % retrieve speed & accel
+	%traj{k} = traj{k}(:,[1,2,3,6,7,10,13,14,15]); % retrieve Length,Velocity,Accel
+	%traj{k} = traj{k}(:,[1,2,3,6,7,10,11,13,14,15]); % retrieve Length,Width,Velocity,Accel
+
+	traj{k} = traj{k}(:,[1,2,3,6,7,12,13,14,15]); % retrieve Class,Velocity,Accel
+
 	if k <=3
 		traj{k}(traj{k}(:,newFeats + 6)>=6,newFeats + 6) = 6;
 	end
@@ -316,12 +322,12 @@ disp('Saving mat files...')
 
 traj = trajTr;
 tracks = tracksTr;
-save('TrainSetVA','traj','tracks');
+save('TrainSetCVA','traj','tracks');
 
 traj = trajVal;
 tracks = tracksVal;
-save('ValSetVA','traj','tracks');
+save('ValSetCVA','traj','tracks');
 
 traj = trajTs;
 tracks = tracksTs;
-save('TestSetVA','traj','tracks');
+save('TestSetCVA','traj','tracks');

@@ -20,7 +20,7 @@ from tqdm import tqdm
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--experiment', default='baseline', help="baseline, baselineX, seq2seq, seq2seqX, attention, attentionX, transformer or transformerX")
+parser.add_argument('--experiment', default='baselineX', help="baseline, baselineX, seq2seq, seq2seqX, attention, attentionX, transformer or transformerX")
 parser.add_argument('--restore_file', default=None, help="Optional, name of the file in experiments/experiment containing weights to reload before \
                     training") # 'best' or 'train'
 
@@ -83,13 +83,13 @@ logging.info("Loading the datasets...")
 newFeats = 0
 behavFeats = 0
 if 'X' in cmd_args.experiment: # new features experiments
-	newFeats = 2
-	behavFeats = 1
+	newFeats = 3
+	behavFeats = 0
 	#trSet = ngsimDataset('data/TrainSetX.mat', grid_size=(19,3) )
 	#valSet = ngsimDataset('data/ValSetX.mat', grid_size=(19,3) )
 
-	trSet = ngsimDataset('data/TrainSetVA.mat', newFeats=newFeats)
-	valSet = ngsimDataset('data/ValSetVA.mat', newFeats=newFeats)
+	trSet = ngsimDataset('data/TrainSetCVA.mat', newFeats=newFeats)
+	valSet = ngsimDataset('data/ValSetCVA.mat', newFeats=newFeats)
 else:
 	trSet = ngsimDataset('data/TrainSet.mat')
 	valSet = ngsimDataset('data/ValSet.mat')
@@ -116,7 +116,7 @@ net.train()
 
 ## Initialize optimizer
 pretrainEpochs = 0
-trainEpochs = 2
+trainEpochs = 4
 
 #if params.use_transformer:
 #	# Out of Hyper-params search experiments

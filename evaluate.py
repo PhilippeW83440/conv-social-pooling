@@ -71,10 +71,10 @@ logging.info("Loading the datasets...")
 newFeats = 0
 behavFeats = 0
 if 'X' in cmd_args.experiment:
-	newFeats = 2
+	newFeats = 3
 	behavFeats = 0
 	#tsSet = ngsimDataset('data/TestSetV.mat', newFeats=newFeats)
-	tsSet = ngsimDataset('data/TestSetVA.mat', newFeats=newFeats)
+	tsSet = ngsimDataset('data/TestSetCVA.mat', newFeats=newFeats)
 else:
 	tsSet = ngsimDataset('data/TestSet.mat')
 
