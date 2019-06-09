@@ -4,6 +4,15 @@ Code for model proposed in [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional 
 
 This code is used as a baseline and starting point for further code evolutions and experiments with seq2seq, attention and transformer models.
 
+
+[//]: # (Image References)
+[image1]: ./visu.png
+
+<p align="center">
+     <img src="./visu.png" alt="Probabilistic and Multimodal Trajectory Predictions" width="100%" height="100%">
+     <br>Probabilistic and Multimodal Trajectory Predictions
+</p>
+
 ### Dependencies
 
 We recommend using python3. You may find convenient to use a virtual env.
