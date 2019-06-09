@@ -61,10 +61,20 @@ You may have to adapt the batch size in params.json for your setup. Generally fo
 python evaluate.py --experiment baseline
 ```
 
-### Experiments results
+### RMSE results on NGSIM test set:
 
 The best results are obtained with an enhanced version of the baseline. We call it CSSA-LSTM(M)  
 
-| Time (sec)    | CV            | CS-LSTM(M) |seq2seq           | Transformer  |CSSA-LSTM(M)
-| ------------- |:-------------:| ----------:|
-|      1        | right-aligned | $1600 |
+| Time (sec) | CV        | CS-LSTM(M) | seq2seq   |Transformer | CSSA-LSTM(M)|
+|:----------:|:---------:|:----------:|:---------:|:----------:|:-----------:|
+|      1     |   0.73    |    0.58    |    0.59   |    0.52    |   0.42      |
+|      2     |   1.78    |    1.27    |    1.28   |    1.23    |   1.06      |
+|      3     |   3.13    |    2.12    |    2.14   |    2.17    |   1.85      |
+|      4     |   4.78    |    3.19    |    3.25   |    3.23    |   2.85      |
+|      5     |   6.68    |    4.51    |    4.59   |    4.70    |   4.11      |
+
+To replicate CSSA-LSTM(M) results:
+* Preprocess NGSIM data: preprocess_dataX.m on raw/ text files from NGSIM
+* Copy generated *.mat files into data/
+* Train CSSA-LSM(M): python train.py --experiment baselineX
+* Evaluate CSSA-LSM(M): python evaluate.py --experiment baselineX
