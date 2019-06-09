@@ -86,4 +86,23 @@ To replicate CSSA-LSTM(M) results:
 * Preprocess NGSIM data: preprocess_dataX.m on raw/ text files from NGSIM
 * Copy generated *.mat files into data/
 * Train CSSA-LSM(M): python train.py --experiment baselineX
-* Evaluate CSSA-LSM(M): python evaluate.py --experiment baselineX
+* Evaluate CSSA-LSM(M): python evaluate.py --experiment baselineX  
+
+
+# Acknowledgements
+
+Thank you to the authors of CS-LSTM(M) and Transformer for open-sourcing their work:
+* https://github.com/nachiket92/conv-social-pooling/  
+* https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/models/transformer.py  
+
+This work is built on top of https://github.com/nachiket92/conv-social-pooling/  
+
+Thank you to the HarvardNLP team for their great walkthrough of the Transformer paper:
+* http://nlp.seas.harvard.edu/2018/04/03/attention.html  
+  
+The transformer.py code is adapted and customized from here.
+
+Thank you to mljack for open-sourcing a plotting utility: 
+* https://github.com/mljack/conv-social-pooling/blob/master/plot.py    
+  
+The plot.py code is adapted and customized from here.
