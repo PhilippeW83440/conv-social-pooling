@@ -4,6 +4,15 @@ Code for model proposed in [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional 
 
 This code is used as a baseline and starting point for further code evolutions and experiments with seq2seq, attention and transformer models.
 
+
+[//]: # (Image References)
+[image1]: ./visu.png
+
+<p align="center">
+     <img src="./visu.png" alt="Probabilistic and Multimodal Trajectory Predictions" width="100%" height="100%">
+     <br>Probabilistic and Multimodal Trajectory Predictions
+</p>
+
 ### Dependencies
 
 We recommend using python3. You may find convenient to use a virtual env.
@@ -61,6 +70,39 @@ You may have to adapt the batch size in params.json for your setup. Generally fo
 python evaluate.py --experiment baseline
 ```
 
-### Experiments results
+### RMSE results on NGSIM test set
 
-In https://github.com/PhilippeW83440/conv-social-pooling/tree/master/experiments  
+The best results are obtained with an enhanced version of the baseline. We call it CSSA-LSTM(M)  
+
+| Time (sec) | CV        | CS-LSTM(M) | seq2seq   |Transformer | CSSA-LSTM(M)|
+|:----------:|:---------:|:----------:|:---------:|:----------:|:-----------:|
+|      1     |   0.73    |    0.58    |    0.59   |    0.52    |   0.42      |
+|      2     |   1.78    |    1.27    |    1.28   |    1.23    |   1.06      |
+|      3     |   3.13    |    2.12    |    2.14   |    2.17    |   1.85      |
+|      4     |   4.78    |    3.19    |    3.25   |    3.23    |   2.85      |
+|      5     |   6.68    |    4.51    |    4.59   |    4.70    |   4.11      |
+
+To replicate CSSA-LSTM(M) results:
+* Preprocess NGSIM data: preprocess_dataX.m on raw/ text files from NGSIM
+* Copy generated *.mat files into data/
+* Train CSSA-LSM(M): python train.py --experiment baselineX
+* Evaluate CSSA-LSM(M): python evaluate.py --experiment baselineX  
+
+
+# Acknowledgements
+
+Thank you to the authors of CS-LSTM(M) and Transformer for open-sourcing their work:
+* https://github.com/nachiket92/conv-social-pooling/  
+* https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/models/transformer.py  
+
+This work is built on top of https://github.com/nachiket92/conv-social-pooling/  
+
+Thank you to the HarvardNLP team for their great walkthrough of the Transformer paper:
+* http://nlp.seas.harvard.edu/2018/04/03/attention.html  
+  
+The transformer.py code is adapted and customized from here.
+
+Thank you to mljack for open-sourcing a plotting utility: 
+* https://github.com/mljack/conv-social-pooling/blob/master/plot.py    
+  
+The plot.py code is adapted and customized from here.
