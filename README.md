@@ -61,7 +61,7 @@ You may have to adapt the batch size in params.json for your setup. Generally fo
 python evaluate.py --experiment baseline
 ```
 
-### RMSE results on NGSIM test set:
+### RMSE results on NGSIM test set
 
 The best results are obtained with an enhanced version of the baseline. We call it CSSA-LSTM(M)  
 
