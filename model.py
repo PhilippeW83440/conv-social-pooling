@@ -115,15 +115,12 @@ class highwayNet(nn.Module):
 		# Spatial Attention Path pipeline: a specific LSTM encoder + 2xConv/pool to process behavioral features
 		if self.newFeats > 0 and self.use_spatial_attention:
 			self.use_bidir = False # just to make code more simple
-			# Similar pipeline than SOC but with specific weights for BEHAV features path
+			# Similar pipeline than SOC but with specific weights
 			self.ip_behav_emb = torch.nn.Linear(self.n_feats, self.input_embedding_size)
 			self.enc_behav_lstm = torch.nn.LSTM(self.input_embedding_size, self.encoder_size, 1)
-			self.behav_conv = torch.nn.Conv2d(self.encoder_size,self.soc_conv_depth,3)
-			self.behav_conv_3x1 = torch.nn.Conv2d(self.soc_conv_depth, self.conv_3x1_depth, (3,1))
-			self.behav_maxpool = torch.nn.MaxPool2d((2,1),padding = (1,0))
-
-			n_att_weights = params.grid_size[0] * params.grid_size[1]
-			self.op_att = torch.nn.Linear(self.soc_embedding_size, n_att_weights)
+			# Spatial Attention layer
+			self.op_att1 = torch.nn.Linear(self.encoder_size, 10)
+			self.op_att2 = torch.nn.Linear(10, 1)
 
 		# Encoder LSTM
 		if self.use_bidir:
@@ -199,31 +196,24 @@ class highwayNet(nn.Module):
 			behav_enc = None
 			if self.newFeats > 0 and self.use_spatial_attention:
 				# Duplicate all features
-				ego_behav = copy.copy(hist)
 				nbrs_behav = copy.copy(nbrs)
 
 				### --- Behav Features Path ---
-				ego_behav_a, (ego_behav_enc,_) = self.enc_behav_lstm(self.leaky_relu(self.ip_behav_emb(ego_behav)))
-				ego_behav_enc = ego_behav_enc.squeeze() # [Batch 128, Feats 64]
-
 				nbrs_behav_a, (nbrs_behav_enc,_) = self.enc_behav_lstm(self.leaky_relu(self.ip_behav_emb(nbrs_behav)))
 				nbrs_behav_enc = nbrs_behav_enc.squeeze() # [eg 850, Feats 64]
 
 				## Masked scatter
 				behav_enc = torch.zeros_like(masks).float() # [128, 3, 13, 64] tensor
 				behav_enc = behav_enc.masked_scatter_(masks, nbrs_behav_enc) # [128, 3, 13, 64] = masked_scatter_([128, 3, 13, 64], [eg 850, 64])
-				behav_enc = behav_enc.permute(0,3,2,1) # we end up with a [128, 64, 13, 3] tensor
+				behav_enc = behav_enc.permute(0,2,1,3) # we end up with a [128, 13, 3, 64] tensor
 
-				#behav_enc[:, :, 6, 1] = ego_behav_enc
-
-				## Apply convolutional pooling on behavioral features:
-				behav_enc = self.behav_maxpool(self.leaky_relu(self.behav_conv_3x1(self.leaky_relu(self.behav_conv(behav_enc)))))
-				behav_enc = behav_enc.view(-1,self.soc_embedding_size)
-
-				energies = self.leaky_relu(self.op_att(behav_enc)) # 39 weights
-				weights = F.softmax(energies, dim=1) # [Batch, 39]
-				self.att_weights = weights.view(-1,self.grid_size[0], self.grid_size[1]) # [Batch, 13, 3]
-				self.att_weights = self.att_weights.unsqueeze(1) # [Batch, 1, 13, 3]
+				# Spatial Attention
+				e = (self.op_att1(behav_enc)).tanh() # => [128, 13, 3, 10]
+				energies = F.relu(self.op_att2(e)) # => [128, 13, 3, 1]
+				energies = energies.view(-1, self.grid_size[0] * self.grid_size[1]) # => [128, 39]
+				alphas = F.softmax(energies, dim=1) # softmax over 39 positions
+				alphas = alphas.view(-1, self.grid_size[0], self.grid_size[1]) # => [128, 13, 3]
+				self.att_weights = alphas.unsqueeze(1) # => [Batch, 1, 13, 3]
 
 			hist_a, (hist_enc,_) = self.enc_lstm(self.leaky_relu(self.ip_emb(hist)))
 			self.hist_a = hist_a # [Tx 16, Batch, dir * encoder_size]
@@ -268,7 +258,7 @@ class highwayNet(nn.Module):
 				# self.soc_maxpool(...):   [128, 16,  5, 1] via MaxPool2d(2, 1)
 				# soc_enc: [128, 80] via reshaping NB: self.soc_embedding_size = 80
 
-				## Apply convolutional social pooling:
+				## Apply convolutional social pooling with spatial attention weights
 				if self.att_weights is not None:
 					soc_enc = soc_enc * self.att_weights
 
