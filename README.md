@@ -63,4 +63,8 @@ python evaluate.py --experiment baseline
 
 ### Experiments results
 
-In https://github.com/PhilippeW83440/conv-social-pooling/tree/master/experiments  
+The best results are obtained with an enhanced version of the baseline. We call it CSSA-LSTM(M)  
+
+| Time (sec)    | CV            | CS-LSTM(M) |seq2seq           | Transformer  |CSSA-LSTM(M)
+| ------------- |:-------------:| ----------:|
+|      1        | right-aligned | $1600 |
