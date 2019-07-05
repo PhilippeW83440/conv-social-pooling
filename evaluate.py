@@ -13,6 +13,7 @@ import logging
 from tqdm import tqdm
 
 import argparse
+import torch.onnx
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--experiment', default='baseline', help="baseline, baselineX, seq2seq, seq2seqX, attention or transformer")
@@ -49,13 +50,15 @@ params.grid_size = (params.grid_size_lon, params.grid_size_lat)
 
 # use GPU if available
 params.use_cuda = torch.cuda.is_available()
+#params.use_cuda = False
 params.train_flag = args['train_flag']
 params.model_dir = args['model_dir']
 
+params.create_onnx = False
 
 # Evaluation metric:
 metric = 'nll'	#or rmse
-#metric = 'rmse'	#or rmse
+metric = 'rmse'	#or rmse
 #metric = 'bigerr'	#or rmse
 
 if metric == 'rmse':
@@ -66,6 +69,8 @@ else:
 
 # Initialize network
 batch_size=1024
+#batch_size=16
+#batch_size=6
 
 logging.info("Loading the datasets...")
 newFeats = 0
@@ -90,6 +95,14 @@ utils.load_checkpoint(net_path, net)
 
 if params.use_cuda:
 	net = net.cuda()
+
+n_params = 0
+for name, parameter in net.named_parameters():
+	n_params += torch.numel(parameter)
+	print("name {}: {} parameters".format(name, torch.numel(parameter)))
+	#print(parameter)
+
+print("net parameters: {}".format(n_params))
 
 # This corrects for the differences in dropout, batch normalization during training and testing.
 # No dropout, batch norm so far; but it is a good default practice anyways
@@ -119,6 +132,10 @@ with torch.no_grad():
 			fut = fut.cuda()
 			op_mask = op_mask.cuda()
 			hist_grid = hist_grid.cuda()
+
+		if params.create_onnx:
+			torch.onnx.export(net, (hist, nbrs, mask, lat_enc, lon_enc, hist_grid), "pred.proto", verbose=True)
+			params.create_onnx = False
 
 		if metric == 'nll':
 			# Forward pass
