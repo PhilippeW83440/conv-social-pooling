@@ -91,16 +91,16 @@ To replicate CSSA-LSTM(M) results:
 
 # Acknowledgements
 
-Thank you to the authors of CS-LSTM(M) and Transformer for open-sourcing their work.   
+Many thanks to the authors of CS-LSTM(M) and Transformer for open-sourcing their work.   
 This code is built on top of the 1st reference:
 * https://github.com/nachiket92/conv-social-pooling/  
 * https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/models/transformer.py  
 
-Thank you to the HarvardNLP team for their great walkthrough of the Transformer paper.  
+Many thanks to the HarvardNLP team for their great walkthrough of the Transformer paper.  
 The transformer.py code is adapted and customized from here:
 * http://nlp.seas.harvard.edu/2018/04/03/attention.html  
   
-Thank you to mljack for open-sourcing a plotting utility.  
+Many thanks to mljack for open-sourcing a plotting utility.  
 The plot.py code is adapted and customized from here:
 * https://github.com/mljack/conv-social-pooling/blob/master/plot.py    
   
