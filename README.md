@@ -1,6 +1,6 @@
 # Convolutional Social Pooling with Spatial Attention
 
-CS230 Project Code based on [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional Social Pooling for Vehicle Trajectory Prediction." CVPRW, 2018
+CS230 Project (http://cs230.stanford.edu/project/) Code based on [1] Nachiket Deo and Mohan M. Trivedi,"Convolutional Social Pooling for Vehicle Trajectory Prediction." CVPRW, 2018
 
 The code from [1]  is used as a baseline and starting point for further code evolutions and experiments with seq2seq, attention and transformer models.
 
