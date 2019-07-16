@@ -54,7 +54,7 @@ params.use_cuda = torch.cuda.is_available()
 params.train_flag = args['train_flag']
 params.model_dir = args['model_dir']
 
-params.create_onnx = False
+params.create_onnx = True
 
 # Evaluation metric:
 metric = 'nll'	#or rmse
@@ -69,7 +69,7 @@ else:
 
 # Initialize network
 batch_size=1024
-#batch_size=16
+batch_size=16
 #batch_size=6
 
 logging.info("Loading the datasets...")
@@ -83,7 +83,7 @@ if 'X' in cmd_args.experiment:
 else:
 	tsSet = ngsimDataset('data/TestSet.mat')
 
-tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=True,num_workers=8,collate_fn=tsSet.collate_fn)
+tsDataloader = DataLoader(tsSet,batch_size=batch_size,shuffle=False,num_workers=0,collate_fn=tsSet.collate_fn)
 
 
 net = highwayNet(params, newFeats=newFeats, behavFeats=behavFeats)
@@ -134,7 +134,7 @@ with torch.no_grad():
 			hist_grid = hist_grid.cuda()
 
 		if params.create_onnx:
-			torch.onnx.export(net, (hist, nbrs, mask, lat_enc, lon_enc, hist_grid), "pred.proto", verbose=True)
+			torch.onnx.export(net, (hist, nbrs, mask, lat_enc, lon_enc, hist_grid), "predtest.proto", verbose=True)
 			params.create_onnx = False
 
 		if metric == 'nll':
@@ -170,7 +170,7 @@ with torch.no_grad():
 		#	print("...NLL: {}".format(torch.pow(lossVals / counts,0.5)*0.3048))	 # Calculate RMSE and convert from feet to meters
 		#else:
 		#	print("...BIGERR: {}".format(lossVals / counts))
-		#print("eval batch_time:", batch_time)
+		print("eval batch_time:", batch_time) # Just for runtime tests TVM benchmarks
 		#break
 
 if metric == 'nll':
